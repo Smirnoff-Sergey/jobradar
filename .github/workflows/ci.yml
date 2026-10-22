@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.2  # у setup-uv нет плавающих тегов мажорных версий
         with:
           version: "0.13.5"
           enable-cache: true
