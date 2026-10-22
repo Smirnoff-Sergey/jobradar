@@ -1,0 +1,4 @@
+# В репозитории и в рабочей копии — LF: файлы попадают в Linux-контейнеры.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — линтеры и тесты
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: jobradar
+          POSTGRES_PASSWORD: jobradar
+          POSTGRES_DB: jobradar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobradar"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      JOBRADAR_TEST_DATABASE_URL: postgresql+asyncpg://jobradar:jobradar@localhost:5432/jobradar_test
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.5"
+          enable-cache: true
+
+      - name: Установка зависимостей
+        run: uv sync --locked
+
+      - name: Ruff — форматирование
+        run: uv run ruff format --check .
+
+      - name: Ruff — линтер
+        run: uv run ruff check .
+
+      - name: Mypy
+        run: uv run mypy
+
+      - name: Тесты
+        run: uv run pytest --cov --cov-report=term-missing --cov-fail-under=80
+
+  docker:
+    name: Сборка Docker-образа
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: backend
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
