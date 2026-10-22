@@ -2,7 +2,7 @@ import httpx
 import pytest
 import respx
 
-from app.core.errors import PermanentExternalError, TransientExternalError
+from app.core.errors import ExternalAccessError, PermanentExternalError, TransientExternalError
 from app.core.http import RetryPolicy, get_json
 
 URL = "https://api.example.com/items"
@@ -97,3 +97,13 @@ def test_backoff_grows_and_is_capped() -> None:
     assert all(0 <= policy.delay(1, None) <= 1 for _ in range(50))
     assert all(0 <= policy.delay(10, None) <= 5 for _ in range(50))
     assert policy.delay(1, retry_after=100) == 5.0
+
+
+@respx.mock
+@pytest.mark.parametrize("status", [401, 403])
+async def test_access_denied(sleep: RecordingSleep, status: int) -> None:
+    route = respx.get(URL).respond(status)
+
+    with pytest.raises(ExternalAccessError, match="доступ запрещён"):
+        await get(sleep)
+    assert route.call_count == 1

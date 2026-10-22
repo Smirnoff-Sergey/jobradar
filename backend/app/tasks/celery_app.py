@@ -1,6 +1,6 @@
 """Приложение Celery.
 
-Воркер:  celery -A app.tasks.celery_app worker -Q celery,details
+Воркер:  celery -A app.tasks.celery_app worker -Q celery,details,llm
 Beat:    celery -A app.tasks.celery_app beat
 """
 
@@ -11,7 +11,14 @@ from celery.schedules import crontab
 
 from app.core.config import get_settings
 from app.sources.registry import SOURCE_CODES
-from app.tasks.names import COLLECT_SOURCE, DETAILS_QUEUE, FETCH_DETAILS
+from app.tasks.names import (
+    COLLECT_SOURCE,
+    DETAILS_QUEUE,
+    EVALUATE_PENDING,
+    EVALUATE_VACANCY,
+    FETCH_DETAILS,
+    LLM_QUEUE,
+)
 
 
 def cron_schedule(expression: str) -> crontab:
@@ -46,14 +53,24 @@ def create_celery() -> Celery:
         task_track_started=True,
         result_expires=timedelta(days=1),
         # Сотни загрузок описаний идут своей очередью и не задерживают сбор и перефильтрацию.
-        task_routes={FETCH_DETAILS: {"queue": DETAILS_QUEUE}},
+        task_routes={
+            FETCH_DETAILS: {"queue": DETAILS_QUEUE},
+            EVALUATE_VACANCY: {"queue": LLM_QUEUE},
+        },
         beat_schedule={
-            f"collect-{code}": {
-                "task": COLLECT_SOURCE,
-                "schedule": cron_schedule(settings.collector.schedule_cron),
-                "args": (code,),
-            }
-            for code in sorted(SOURCE_CODES)
+            **{
+                f"collect-{code}": {
+                    "task": COLLECT_SOURCE,
+                    "schedule": cron_schedule(settings.collector.schedule_cron),
+                    "args": (code,),
+                }
+                for code in sorted(SOURCE_CODES)
+            },
+            # Досыл оценок, которые не дошли или не уложились в дневной лимит.
+            "evaluate-pending": {
+                "task": EVALUATE_PENDING,
+                "schedule": crontab(minute=30),
+            },
         },
     )
     return app

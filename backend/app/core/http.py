@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from app.core.errors import PermanentExternalError, TransientExternalError
+from app.core.errors import ExternalAccessError, PermanentExternalError, TransientExternalError
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +49,17 @@ def _parse_retry_after(value: str | None) -> float | None:
         return None  # формат HTTP-даты не поддерживаем: обычная экспонента тоже подойдёт
 
 
-async def _get_once(
-    client: httpx.AsyncClient, url: str, params: Mapping[str, str | int] | None
+async def _request_once(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    params: Mapping[str, str | int] | None,
+    json: Any,
+    headers: Mapping[str, str] | None,
 ) -> Any:
     try:
-        response = await client.get(url, params=params)
+        response = await client.request(method, url, params=params, json=json, headers=headers)
     except httpx.TimeoutException as exc:
         raise TransientExternalError(f"Таймаут запроса к {url}") from exc
     except httpx.TransportError as exc:
@@ -67,6 +73,8 @@ async def _get_once(
         )
     if status >= httpx.codes.INTERNAL_SERVER_ERROR:
         raise TransientExternalError(f"{url}: HTTP {status}")
+    if status in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
+        raise ExternalAccessError(f"{url}: HTTP {status} — доступ запрещён")
     if status >= httpx.codes.BAD_REQUEST:
         raise PermanentExternalError(f"{url}: HTTP {status}")
     try:
@@ -75,17 +83,22 @@ async def _get_once(
         raise PermanentExternalError(f"{url}: ответ не в формате JSON") from exc
 
 
-async def get_json(
+async def request_json(
     client: httpx.AsyncClient,
+    method: str,
     url: str,
     *,
-    params: Mapping[str, str | int] | None = None,
     policy: RetryPolicy,
+    params: Mapping[str, str | int] | None = None,
+    json: Any = None,
+    headers: Mapping[str, str] | None = None,
     sleep: Sleep = asyncio.sleep,
 ) -> Any:
     for attempt in range(1, policy.max_attempts + 1):
         try:
-            return await _get_once(client, url, params)
+            return await _request_once(
+                client, method, url, params=params, json=json, headers=headers
+            )
         except TransientExternalError as exc:
             if attempt == policy.max_attempts:
                 raise
@@ -99,3 +112,14 @@ async def get_json(
             )
             await sleep(delay)
     raise AssertionError("недостижимо: цикл либо возвращает ответ, либо бросает ошибку")
+
+
+async def get_json(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: Mapping[str, str | int] | None = None,
+    policy: RetryPolicy,
+    sleep: Sleep = asyncio.sleep,
+) -> Any:
+    return await request_json(client, "GET", url, policy=policy, params=params, sleep=sleep)

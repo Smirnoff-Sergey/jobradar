@@ -13,6 +13,7 @@ from app.core.errors import (
     ConflictError,
     ExternalServiceError,
     InvalidPasswordError,
+    LLMDisabledError,
     NotFoundError,
     UnauthorizedError,
 )
@@ -32,6 +33,7 @@ _APP_ERROR_STATUSES: tuple[tuple[type[AppError], int], ...] = (
     (ConflictError, status.HTTP_409_CONFLICT),
     (InvalidPasswordError, status.HTTP_422_UNPROCESSABLE_CONTENT),
     (ExternalServiceError, status.HTTP_502_BAD_GATEWAY),
+    (LLMDisabledError, status.HTTP_503_SERVICE_UNAVAILABLE),
 )
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
 

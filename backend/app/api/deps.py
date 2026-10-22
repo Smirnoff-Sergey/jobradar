@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import NotAuthenticatedError
 from app.db.models import User
 from app.services.auth import AuthService
+from app.services.evaluation import EvaluationScheduler
 from app.services.queue import TaskQueue
 
 
@@ -39,6 +40,15 @@ def get_task_queue() -> TaskQueue:
 
 
 TaskQueueDep = Annotated[TaskQueue, Depends(get_task_queue)]
+
+
+def get_evaluation_scheduler(
+    session: SessionDep, queue: TaskQueueDep, settings: SettingsDep
+) -> EvaluationScheduler:
+    return EvaluationScheduler(session, queue, settings.llm)
+
+
+EvaluationSchedulerDep = Annotated[EvaluationScheduler, Depends(get_evaluation_scheduler)]
 
 # auto_error=False: отсутствие токена обрабатываем сами, чтобы ответ был в едином формате ошибок.
 _bearer = HTTPBearer(auto_error=False)

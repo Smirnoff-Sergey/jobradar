@@ -7,7 +7,7 @@ from celery.result import AsyncResult
 
 from app.services.queue import TaskStatus
 from app.tasks.celery_app import celery_app
-from app.tasks.names import COLLECT_SOURCE, FETCH_DETAILS, REFILTER_USER
+from app.tasks.names import COLLECT_SOURCE, EVALUATE_VACANCY, FETCH_DETAILS, REFILTER_USER
 
 
 class CeleryTaskQueue:
@@ -30,6 +30,11 @@ class CeleryTaskQueue:
 
     async def refilter_user(self, user_id: int) -> str:
         return await self._send(REFILTER_USER, user_id)
+
+    async def evaluate_vacancy(
+        self, vacancy_id: int, resume_id: int, *, force: bool = False
+    ) -> str:
+        return await self._send(EVALUATE_VACANCY, vacancy_id, resume_id, force)
 
     async def status(self, task_id: str) -> TaskStatus:
         def read() -> TaskStatus:

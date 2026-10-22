@@ -69,3 +69,33 @@ class TransientExternalError(ExternalServiceError):
 
 class PermanentExternalError(ExternalServiceError):
     """Повтор не поможет: 4xx (кроме 429), некорректный ответ."""
+
+
+class ExternalAccessError(ExternalServiceError):
+    """401/403: внешний сервис не пускает нас вообще (ключ, регион, блокировка).
+
+    Это не проблема конкретного запроса — данные не помечаются как неудачные,
+    их обработают, когда доступ восстановят.
+    """
+
+    code = "external_access_denied"
+    message = "Внешний сервис отказал в доступе"
+
+
+class LLMResponseError(PermanentExternalError):
+    """Модель ответила не по схеме или несогласованно."""
+
+    code = "llm_response_error"
+    message = "Модель вернула некорректный ответ"
+
+
+class LLMDisabledError(AppError):
+    code = "llm_disabled"
+    message = "LLM-оценка выключена"
+
+
+class PaidUsageError(AppError):
+    """Запрос к LLM оказался платным. Политика проекта: только бесплатные модели."""
+
+    code = "paid_usage"
+    message = "Запрос к LLM оказался платным — оценка остановлена"

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError, NotFoundError
 from app.db.models import Source
+from app.repositories.evaluations import EvaluationRepository
 from app.repositories.sources import SourceRepository
 from app.repositories.vacancies import VacancyRepository
 from app.services.filtering import VacancyFilterService
@@ -52,6 +53,7 @@ class CollectorService:
         self._queue = queue
         self._sources = SourceRepository(session)
         self._vacancies = VacancyRepository(session)
+        self._evaluations = EvaluationRepository(session)
         self._filter = VacancyFilterService(session)
 
     async def collect(self) -> CollectStats:
@@ -96,6 +98,8 @@ class CollectorService:
 
         active_before = await self._vacancies.count_active(source.code)
         changed = await self._vacancies.upsert_many(source.code, items)
+        # Оценки старого текста вакансии больше не верны — их пересчитает досыл.
+        await self._evaluations.delete_for_vacancies(changed)
         complete = len(items) >= active_before * MIN_COMPLETENESS
         if complete and items:
             seen = [item.external_id for item in items]

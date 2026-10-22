@@ -1,5 +1,5 @@
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import pytest
@@ -133,3 +133,12 @@ async def auth_headers(client: AsyncClient, user: User) -> dict[str, str]:
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
+
+
+@pytest.fixture
+def llm_enabled(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Оценка включена: задан ключ LLM (сам клиент в тестах не используется)."""
+    monkeypatch.setenv("JOBRADAR_LLM__API_KEY", "test-key")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()

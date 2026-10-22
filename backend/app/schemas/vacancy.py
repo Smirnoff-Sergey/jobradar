@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict
 
-from app.db.models import Vacancy, VacancyFilterResult
+from app.domain.evaluation import EvaluationStatus, Verdict
+from app.repositories.vacancies import VacancyRow
 
 
 class FilterResultRead(BaseModel):
@@ -12,6 +13,21 @@ class FilterResultRead(BaseModel):
     passed: bool
     reasons: list[str]
     salary_unknown: bool
+
+
+class EvaluationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: EvaluationStatus
+    score: int | None
+    verdict: Verdict | None
+    model: str | None
+    prompt_version: str
+    matches: list[dict[str, Any]] | None
+    gaps: list[dict[str, Any]] | None
+    dealbreakers: list[str] | None
+    error: str | None
+    updated_at: datetime
 
 
 class VacancyListItem(BaseModel):
@@ -31,11 +47,16 @@ class VacancyListItem(BaseModel):
     published_at: datetime | None
     is_active: bool
     filter: FilterResultRead | None = None
+    evaluation: EvaluationRead | None = None
 
     @classmethod
-    def build(cls, vacancy: Vacancy, decision: VacancyFilterResult | None) -> Self:
-        result = None if decision is None else FilterResultRead.model_validate(decision)
-        return cls.model_validate(vacancy).model_copy(update={"filter": result})
+    def build(cls, row: VacancyRow) -> Self:
+        return cls.model_validate(row.vacancy).model_copy(
+            update={
+                "filter": row.decision and FilterResultRead.model_validate(row.decision),
+                "evaluation": row.evaluation and EvaluationRead.model_validate(row.evaluation),
+            }
+        )
 
 
 class VacancyRead(VacancyListItem):

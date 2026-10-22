@@ -4,8 +4,10 @@
 """
 
 import asyncio
+import json
 import os
 from collections.abc import Iterator
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -17,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app import cli
 from app.core.config import CollectorSettings, get_settings
 from app.core.errors import NotFoundError
 from app.services.queue import TaskStatus
@@ -27,7 +30,9 @@ from app.tasks.celery_app import celery_app, cron_schedule
 from app.tasks.names import COLLECT_SOURCE, DETAILS_QUEUE, FETCH_DETAILS, REFILTER_USER
 from app.tasks.queue import CeleryTaskQueue
 from tests.conftest import TEST_DATABASE_URL_ENV
-from tests.fakes import FakeTaskQueue, load_getmatch_fixture
+from tests.fakes import FakeTaskQueue, completion_body, llm_answer, load_getmatch_fixture
+
+TASK_USER = "tasks@example.com"
 
 
 def run_sql(statement: str) -> Any:
@@ -56,6 +61,8 @@ def worker_queue(engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch) -> Iterat
     finally:
         get_settings.cache_clear()
         run_sql("DELETE FROM vacancies")
+        run_sql(f"DELETE FROM users WHERE email = '{TASK_USER}'")
+        run_sql("DELETE FROM llm_daily_usage")
         run_sql(
             "UPDATE sources SET last_run_status = NULL, last_run_finished_at = NULL,"
             " last_run_stats = NULL, last_error = NULL"
@@ -165,3 +172,52 @@ async def test_celery_queue_reads_status() -> None:
     assert failed.state == "FAILURE"
     assert failed.error is not None
     assert "сбой" in failed.error
+
+
+@respx.mock
+def test_evaluation_pipeline(
+    worker_queue: FakeTaskQueue, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Сбор → описание → постановка оценки → оценка через (замоканный) OpenRouter."""
+    monkeypatch.setenv("JOBRADAR_LLM__API_KEY", "test-key")
+    get_settings.cache_clear()
+    user_id = run_sql(
+        f"INSERT INTO users (email, password_hash) VALUES ('{TASK_USER}', 'x') RETURNING id"
+    )
+    run_sql(f"INSERT INTO search_profiles (user_id) VALUES ({user_id})")
+    resume_file = tmp_path / "resume.txt"
+    resume_file.write_text("Python-разработчик, 4 года, Django, PostgreSQL", encoding="utf-8")
+    assert cli.main(["load-resume", "--email", TASK_USER, "--file", str(resume_file)]) == 0
+    resume_id = run_sql(f"SELECT id FROM resumes WHERE user_id = {user_id}")
+
+    respx.get(OFFERS_URL).respond(json=load_getmatch_fixture())
+    respx.get(f"{OFFERS_URL}/101").respond(json={"description": "<p>Python, PostgreSQL</p>"})
+    llm_route = respx.post(f"{get_settings().llm.base_url}/chat/completions").respond(
+        json=completion_body(llm_answer())
+    )
+    jobs.collect_source.run("getmatch")
+    vacancy_id = run_sql("SELECT id FROM vacancies WHERE external_id = '101'")
+
+    assert jobs.fetch_details.run(vacancy_id) is True
+    assert worker_queue.evaluations == [(vacancy_id, resume_id, False)]
+    assert jobs.evaluate_pair.run(vacancy_id, resume_id) == "done"
+    assert run_sql(f"SELECT verdict FROM evaluations WHERE vacancy_id = {vacancy_id}") == "apply"
+    assert run_sql("SELECT requests FROM llm_daily_usage") == 1
+
+    worker_queue.evaluations.clear()
+    jobs.evaluate_pending.run()
+    assert (vacancy_id, resume_id, False) not in worker_queue.evaluations
+
+    out = tmp_path / "eval.jsonl"
+    assert cli.main(["export-eval-set", "--out", str(out), "--limit", "5"]) == 0
+    exported = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert exported[0]["id"] == "getmatch:101"
+    assert exported[0]["label"] == ""
+
+    # Невалидный JSON от модели при переоценке: воркер не падает, оценка — failed.
+    llm_route.respond(json=completion_body("не JSON-объект"))
+    assert jobs.evaluate_pair.run(vacancy_id, resume_id, True) == "failed"
+
+
+def test_evaluate_task_disabled_without_key() -> None:
+    assert jobs.evaluate_pair.run(1, 1) == "disabled"

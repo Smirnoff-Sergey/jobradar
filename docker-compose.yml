@@ -61,7 +61,7 @@ services:
 
   worker:
     <<: *backend
-    command: ["celery", "-A", "app.tasks.celery_app", "worker", "-Q", "celery,details", "--loglevel=INFO", "--concurrency=2"]
+    command: ["celery", "-A", "app.tasks.celery_app", "worker", "-Q", "celery,details,llm", "--loglevel=INFO", "--concurrency=2"]
     depends_on: *after-migrations
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5"]

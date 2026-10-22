@@ -1,15 +1,36 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
 
-from sqlalchemy import BigInteger, Select, String, case, func, or_, select, update
+from sqlalchemy import (
+    BigInteger,
+    ColumnElement,
+    Select,
+    String,
+    and_,
+    case,
+    func,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Vacancy, VacancyFilterResult
+from app.db.models import Evaluation, Resume, Vacancy, VacancyFilterResult
 from app.domain.vacancies import VacancyListQuery
 from app.repositories.arrays import in_array, not_in_array
 from app.sources.base import VacancyData
 
-VacancyWithDecision = tuple[Vacancy, VacancyFilterResult | None]
+
+@dataclass(frozen=True, slots=True)
+class VacancyRow:
+    """Вакансия с решением фильтра и оценкой по активному резюме пользователя."""
+
+    vacancy: Vacancy
+    decision: VacancyFilterResult | None
+    evaluation: Evaluation | None
+
 
 # asyncpg ограничивает число параметров запроса (32767); пачки по 500 строк с запасом влезают.
 UPSERT_CHUNK = 500
@@ -36,10 +57,28 @@ def _row(source_code: str, item: VacancyData) -> dict[str, object]:
     }
 
 
-def _with_decision(user_id: int) -> Select[Vacancy, VacancyFilterResult]:
-    return select(Vacancy, VacancyFilterResult).outerjoin(
-        VacancyFilterResult,
-        (VacancyFilterResult.vacancy_id == Vacancy.id) & (VacancyFilterResult.user_id == user_id),
+def _for_user(
+    user_id: int, prompt_version: str
+) -> Select[Vacancy, VacancyFilterResult, Evaluation]:
+    active_resume = (
+        select(Resume.id).where(Resume.user_id == user_id, Resume.is_active).scalar_subquery()
+    )
+    return (
+        select(Vacancy, VacancyFilterResult, Evaluation)
+        .outerjoin(
+            VacancyFilterResult,
+            and_(
+                VacancyFilterResult.vacancy_id == Vacancy.id, VacancyFilterResult.user_id == user_id
+            ),
+        )
+        .outerjoin(
+            Evaluation,
+            and_(
+                Evaluation.vacancy_id == Vacancy.id,
+                Evaluation.resume_id == active_resume,
+                Evaluation.prompt_version == prompt_version,
+            ),
+        )
     )
 
 
@@ -105,27 +144,52 @@ class VacancyRepository:
             stmt = stmt.where(in_array(Vacancy.id, ids, BigInteger()))
         return (await self._session.scalars(stmt)).all()
 
-    async def get_for_user(self, vacancy_id: int, user_id: int) -> VacancyWithDecision | None:
-        result = await self._session.execute(
-            _with_decision(user_id).where(Vacancy.id == vacancy_id)
+    async def list_passed_with_description(self, limit: int) -> Sequence[Vacancy]:
+        """Активные вакансии с загруженным описанием, прошедшие фильтр хотя бы у кого-то."""
+        passed = (
+            select(VacancyFilterResult.vacancy_id)
+            .where(VacancyFilterResult.vacancy_id == Vacancy.id, VacancyFilterResult.passed)
+            .exists()
         )
-        row = result.first()
-        return None if row is None else (row.Vacancy, row.VacancyFilterResult)
+        stmt = (
+            select(Vacancy)
+            .where(Vacancy.is_active, Vacancy.description.is_not(None), passed)
+            .order_by(Vacancy.published_at.desc().nulls_last(), Vacancy.id)
+            .limit(limit)
+        )
+        return (await self._session.scalars(stmt)).all()
 
-    async def list_for_user(self, query: VacancyListQuery) -> tuple[list[VacancyWithDecision], int]:
-        """Вакансии вместе с решением фильтра для пользователя и общее число строк."""
-        stmt = _with_decision(query.user_id)
+    async def get_for_user(
+        self, vacancy_id: int, user_id: int, prompt_version: str
+    ) -> VacancyRow | None:
+        stmt = _for_user(user_id, prompt_version).where(Vacancy.id == vacancy_id)
+        row = (await self._session.execute(stmt)).first()
+        return None if row is None else VacancyRow(*row)
+
+    async def list_for_user(
+        self, query: VacancyListQuery, prompt_version: str
+    ) -> tuple[list[VacancyRow], int]:
+        """Вакансии с решением фильтра и оценкой для пользователя и общее число строк."""
+        stmt = _for_user(query.user_id, prompt_version)
         if query.status != "all":
             stmt = stmt.where(VacancyFilterResult.passed.is_(query.status == "passed"))
         if query.source_code is not None:
             stmt = stmt.where(Vacancy.source_code == query.source_code)
         if query.active_only:
             stmt = stmt.where(Vacancy.is_active)
+        if query.verdict is not None:
+            stmt = stmt.where(Evaluation.verdict == query.verdict)
+        if query.score_min is not None:
+            stmt = stmt.where(Evaluation.score >= query.score_min)
 
         total = await self._session.scalar(select(func.count()).select_from(stmt.subquery()))
+        order: list[ColumnElement[Any]] = [
+            Vacancy.published_at.desc().nulls_last(),
+            Vacancy.id.desc(),
+        ]
+        if query.sort == "score":
+            order.insert(0, Evaluation.score.desc().nulls_last())
         rows = await self._session.execute(
-            stmt.order_by(Vacancy.published_at.desc().nulls_last(), Vacancy.id.desc())
-            .limit(query.limit)
-            .offset(query.offset)
+            stmt.order_by(*order).limit(query.limit).offset(query.offset)
         )
-        return [(row.Vacancy, row.VacancyFilterResult) for row in rows], total or 0
+        return [VacancyRow(*row) for row in rows], total or 0
