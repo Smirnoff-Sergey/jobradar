@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+
+# Окружение
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+
+# Claude Code
+CLAUDE.md
+AGENTS.md
+.claude/
