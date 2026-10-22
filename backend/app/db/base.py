@@ -1,4 +1,4 @@
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, text
 from sqlalchemy.orm import DeclarativeBase
 
 # Явные имена ограничений: Alembic генерирует предсказуемые миграции, а их можно удалять по имени.
@@ -9,6 +9,9 @@ NAMING_CONVENTION = {
     "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
     "pk": "pk_%(table_name)s",
 }
+
+# Значение по умолчанию для колонок-массивов PostgreSQL.
+EMPTY_ARRAY = text("'{}'")
 
 
 class Base(DeclarativeBase):

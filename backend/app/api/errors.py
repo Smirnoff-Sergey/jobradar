@@ -8,7 +8,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.errors import AppError
+from app.core.errors import (
+    AppError,
+    ConflictError,
+    ExternalServiceError,
+    InvalidPasswordError,
+    NotFoundError,
+    UnauthorizedError,
+)
 from app.schemas.common import ErrorDetail, ErrorResponse
 
 logger = logging.getLogger(__name__)
@@ -17,6 +24,16 @@ _HTTP_ERROR_CODES = {
     status.HTTP_404_NOT_FOUND: "not_found",
     status.HTTP_405_METHOD_NOT_ALLOWED: "method_not_allowed",
 }
+
+# Порядок важен: берётся первый класс, к которому относится ошибка.
+_APP_ERROR_STATUSES: tuple[tuple[type[AppError], int], ...] = (
+    (UnauthorizedError, status.HTTP_401_UNAUTHORIZED),
+    (NotFoundError, status.HTTP_404_NOT_FOUND),
+    (ConflictError, status.HTTP_409_CONFLICT),
+    (InvalidPasswordError, status.HTTP_422_UNPROCESSABLE_CONTENT),
+    (ExternalServiceError, status.HTTP_502_BAD_GATEWAY),
+)
+_UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
 
 # Поля ошибки валидации, которые не отдаём клиенту: в input может оказаться пароль.
 _HIDDEN_VALIDATION_FIELDS = frozenset({"input", "ctx", "url"})
@@ -40,7 +57,12 @@ def error_response(
 
 async def _handle_app_error(_: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, AppError)
-    return error_response(exc.status_code, exc.code, exc.message, headers=exc.headers)
+    status_code = next(
+        (code for error_type, code in _APP_ERROR_STATUSES if isinstance(exc, error_type)),
+        status.HTTP_400_BAD_REQUEST,
+    )
+    headers = _UNAUTHORIZED_HEADERS if isinstance(exc, UnauthorizedError) else None
+    return error_response(status_code, exc.code, exc.message, headers=headers)
 
 
 async def _handle_validation_error(_: Request, exc: Exception) -> JSONResponse:

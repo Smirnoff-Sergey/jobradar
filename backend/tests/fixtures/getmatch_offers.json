@@ -1,0 +1,47 @@
+{
+  "meta": {"total": 3, "offset": 0, "limit": 20},
+  "offers": [
+    {
+      "id": 101,
+      "position": " Python Backend Developer ",
+      "url": "/vacancies/101-python-backend-developer",
+      "published_at": "2026-10-20T10:00:00.000000",
+      "is_active": true,
+      "salary_hidden": false,
+      "salary_display_from": 250000,
+      "salary_display_to": 320000,
+      "salary_currency": "RUB",
+      "salary_taxes": "net",
+      "offer_description": "<b>Что делать:</b> разрабатывать API на FastAPI.",
+      "company": {"name": "Пример Тех"},
+      "location_items": [
+        {"label": "Весь мир", "format": "remote", "exclude": false},
+        {"label": "Москва", "format": "office", "exclude": false}
+      ]
+    },
+    {
+      "id": 102,
+      "position": "Node.js Developer",
+      "url": "/vacancies/102-nodejs-developer",
+      "published_at": "2026-10-19T08:00:00",
+      "is_active": true,
+      "salary_hidden": true,
+      "salary_display_from": null,
+      "salary_display_to": null,
+      "salary_currency": null,
+      "salary_taxes": "gross",
+      "offer_description": "Node.js, TypeScript",
+      "company": {"name": "Другая компания"},
+      "location_items": [
+        {"label": "Москва", "format": "hybrid", "exclude": false},
+        {"label": "Санкт-Петербург", "format": "relocation_company", "exclude": false},
+        {"label": "Казань", "format": "remote", "exclude": true}
+      ]
+    },
+    {
+      "id": 103,
+      "url": "/vacancies/103-broken",
+      "salary_hidden": true
+    }
+  ]
+}

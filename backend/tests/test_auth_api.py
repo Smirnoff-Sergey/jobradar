@@ -109,7 +109,7 @@ async def test_me_rejects_refresh_token(client: AsyncClient, user: User) -> None
 
 
 async def test_me_for_deleted_user(client: AsyncClient, settings: Settings) -> None:
-    token = create_token(999_999, "access", settings)
+    token = create_token(999_999, "access", settings.auth)
 
     response = await client.get("/api/v1/auth/me", headers=bearer(token))
 

@@ -5,7 +5,7 @@ from uuid import uuid4
 import jwt
 from pwdlib import PasswordHash
 
-from app.core.config import Settings
+from app.core.config import AuthSettings
 from app.core.errors import InvalidTokenError
 
 TokenType = Literal["access", "refresh"]
@@ -33,7 +33,7 @@ DUMMY_PASSWORD_HASH = hash_password(uuid4().hex)
 def create_token(
     user_id: int,
     token_type: TokenType,
-    settings: Settings,
+    settings: AuthSettings,
     *,
     now: datetime | None = None,
 ) -> str:
@@ -56,7 +56,7 @@ def create_token(
     )
 
 
-def decode_token(token: str, expected_type: TokenType, settings: Settings) -> int:
+def decode_token(token: str, expected_type: TokenType, settings: AuthSettings) -> int:
     """Проверяет подпись, срок и тип токена. Возвращает id пользователя."""
     try:
         payload = jwt.decode(

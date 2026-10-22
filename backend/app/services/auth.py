@@ -44,7 +44,7 @@ def _check_password(password: str) -> None:
 class AuthService:
     def __init__(self, session: AsyncSession, settings: Settings) -> None:
         self._session = session
-        self._settings = settings
+        self._auth_settings = settings.auth
         self._users = UserRepository(session)
 
     async def create_user(self, email: str, password: str) -> User:
@@ -68,11 +68,15 @@ class AuthService:
         return self._issue_tokens(user.id)
 
     async def refresh(self, refresh_token: str) -> TokenPair:
-        user = await self._get_active_user(decode_token(refresh_token, "refresh", self._settings))
+        user = await self._get_active_user(
+            decode_token(refresh_token, "refresh", self._auth_settings)
+        )
         return self._issue_tokens(user.id)
 
     async def get_user_by_access_token(self, access_token: str) -> User:
-        return await self._get_active_user(decode_token(access_token, "access", self._settings))
+        return await self._get_active_user(
+            decode_token(access_token, "access", self._auth_settings)
+        )
 
     async def _get_active_user(self, user_id: int) -> User:
         user = await self._users.get_by_id(user_id)
@@ -82,6 +86,6 @@ class AuthService:
 
     def _issue_tokens(self, user_id: int) -> TokenPair:
         return TokenPair(
-            access_token=create_token(user_id, "access", self._settings),
-            refresh_token=create_token(user_id, "refresh", self._settings),
+            access_token=create_token(user_id, "access", self._auth_settings),
+            refresh_token=create_token(user_id, "refresh", self._auth_settings),
         )

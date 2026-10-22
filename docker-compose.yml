@@ -5,7 +5,14 @@ x-backend: &backend
       required: false
   environment:
     JOBRADAR_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-jobradar}:${POSTGRES_PASSWORD:-jobradar}@postgres:5432/${POSTGRES_DB:-jobradar}
-    JOBRADAR_JWT_SECRET: ${JOBRADAR_JWT_SECRET:?задайте JOBRADAR_JWT_SECRET в .env}
+    JOBRADAR_REDIS__URL: redis://redis:6379/0
+    JOBRADAR_AUTH__JWT_SECRET: ${JOBRADAR_AUTH__JWT_SECRET:?задайте JOBRADAR_AUTH__JWT_SECRET в .env}
+
+x-after-migrations: &after-migrations
+  migrate:
+    condition: service_completed_successfully
+  redis:
+    condition: service_healthy
 
 services:
   postgres:
@@ -22,7 +29,18 @@ services:
       timeout: 3s
       retries: 10
 
-  # Миграции применяются отдельным одноразовым контейнером до старта API.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Миграции применяются отдельным одноразовым контейнером до старта API и воркеров.
   migrate:
     <<: *backend
     command: ["alembic", "upgrade", "head"]
@@ -34,14 +52,29 @@ services:
     <<: *backend
     ports:
       - "${API_PORT:-8000}:8000"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
+    depends_on: *after-migrations
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 10s
       timeout: 3s
       retries: 5
 
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "app.tasks.celery_app", "worker", "-Q", "celery,details", "--loglevel=INFO", "--concurrency=2"]
+    depends_on: *after-migrations
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Расписание: ровно один экземпляр, иначе задачи будут ставиться дважды.
+  beat:
+    <<: *backend
+    command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    depends_on: *after-migrations
+
 volumes:
   pgdata:
+  redisdata:

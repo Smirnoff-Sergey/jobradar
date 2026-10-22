@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from functools import cache
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -9,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import NotAuthenticatedError
 from app.db.models import User
 from app.services.auth import AuthService
+from app.services.queue import TaskQueue
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -25,6 +27,18 @@ def get_auth_service(session: SessionDep, settings: SettingsDep) -> AuthService:
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+@cache
+def get_task_queue() -> TaskQueue:
+    # Импорт внутри функции: Celery поднимается только при первой постановке задачи,
+    # а тесты подменяют эту зависимость фейковой очередью.
+    from app.tasks.queue import CeleryTaskQueue
+
+    return CeleryTaskQueue()
+
+
+TaskQueueDep = Annotated[TaskQueue, Depends(get_task_queue)]
 
 # auto_error=False: отсутствие токена обрабатываем сами, чтобы ответ был в едином формате ошибок.
 _bearer = HTTPBearer(auto_error=False)

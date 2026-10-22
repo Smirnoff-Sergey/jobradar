@@ -12,14 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from sqlalchemy.pool import NullPool
 
 # Секрет нужен до первого вызова get_settings().
-os.environ.setdefault("JOBRADAR_JWT_SECRET", "test-secret-" + "x" * 52)
+os.environ.setdefault("JOBRADAR_AUTH__JWT_SECRET", "test-secret-" + "x" * 52)
 
-from app.api.deps import get_session
+from app.api.deps import get_session, get_task_queue
 from app.core.config import Settings, get_settings
-from app.db.models import User
+from app.db.models import SearchProfile, User
 from app.main import create_app
 from app.services.auth import AuthService
 from tests.constants import USER_EMAIL, USER_PASSWORD
+from tests.fakes import FakeTaskQueue
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 TEST_DATABASE_URL_ENV = "JOBRADAR_TEST_DATABASE_URL"
@@ -95,14 +96,37 @@ async def user(auth_service: AuthService) -> User:
 
 
 @pytest.fixture
-def app(db_session: AsyncSession) -> FastAPI:
+def task_queue() -> FakeTaskQueue:
+    return FakeTaskQueue()
+
+
+@pytest.fixture
+async def profile(db_session: AsyncSession, user: User) -> SearchProfile:
+    """Профиль, который пропускает вакансии tests.fakes.vacancy() по умолчанию."""
+    profile = SearchProfile(user_id=user.id, title_keywords=["python"], min_salary=150_000)
+    db_session.add(profile)
+    await db_session.commit()
+    return profile
+
+
+@pytest.fixture
+def app(db_session: AsyncSession, task_queue: FakeTaskQueue) -> FastAPI:
     app = create_app()
 
     async def override_session() -> AsyncIterator[AsyncSession]:
         yield db_session
 
     app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_task_queue] = lambda: task_queue
     return app
+
+
+@pytest.fixture
+async def auth_headers(client: AsyncClient, user: User) -> dict[str, str]:
+    response = await client.post(
+        "/api/v1/auth/login", json={"email": USER_EMAIL, "password": USER_PASSWORD}
+    )
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 @pytest.fixture

@@ -1,11 +1,13 @@
-"""Ошибки предметной области. Обработчики в app/api/errors.py превращают их в HTTP-ответы."""
+"""Ошибки предметной области.
+
+HTTP-статусы здесь не задаются: соответствие «ошибка → статус» живёт в app/api/errors.py,
+а сервисы и фоновые задачи не зависят от транспорта.
+"""
 
 
 class AppError(Exception):
-    status_code = 400
     code = "bad_request"
     message = "Некорректный запрос"
-    headers: dict[str, str] | None = None
 
     def __init__(self, message: str | None = None) -> None:
         if message is not None:
@@ -14,8 +16,7 @@ class AppError(Exception):
 
 
 class UnauthorizedError(AppError):
-    status_code = 401
-    headers = {"WWW-Authenticate": "Bearer"}  # noqa: RUF012  # не изменяется
+    pass
 
 
 class NotAuthenticatedError(UnauthorizedError):
@@ -33,13 +34,38 @@ class InvalidTokenError(UnauthorizedError):
     message = "Некорректный токен"
 
 
+class NotFoundError(AppError):
+    code = "not_found"
+    message = "Не найдено"
+
+
 class ConflictError(AppError):
-    status_code = 409
     code = "conflict"
     message = "Конфликт с существующими данными"
 
 
 class InvalidPasswordError(AppError):
-    status_code = 422
     code = "invalid_password"
     message = "Пароль не подходит по требованиям"
+
+
+class ExternalServiceError(AppError):
+    """Сбой внешнего сервиса. `retryable` говорит, есть ли смысл повторять запрос."""
+
+    code = "external_service_error"
+    message = "Внешний сервис недоступен"
+    retryable = False
+
+
+class TransientExternalError(ExternalServiceError):
+    """Временный сбой: таймаут, обрыв соединения, 429, 5xx."""
+
+    retryable = True
+
+    def __init__(self, message: str | None = None, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+class PermanentExternalError(ExternalServiceError):
+    """Повтор не поможет: 4xx (кроме 429), некорректный ответ."""
