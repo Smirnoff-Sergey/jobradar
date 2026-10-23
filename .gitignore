@@ -12,6 +12,8 @@ htmlcov/
 # Node
 node_modules/
 dist/
+coverage/
+*.tsbuildinfo
 
 # Окружение
 .env

@@ -1,0 +1,29 @@
+/* Плотный список строк в рамке — лента и журнал откликов. */
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel);
+}
+
+/* Пока грузится следующая страница, старая видна приглушённой. */
+.list[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.row + .row {
+  border-top: 1px solid var(--line-soft);
+}
+
+.title {
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.title:hover {
+  color: var(--action);
+  text-decoration: underline;
+}

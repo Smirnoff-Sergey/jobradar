@@ -6,6 +6,7 @@ python -m app.cli export-eval-set --out vacancies.jsonl [--limit 20]
 python -m app.cli llm-unpause
 python -m app.cli telegram-link --email owner@example.com
 python -m app.cli telegram-webhook --url https://example.com/api/v1/telegram/webhook | --delete
+python -m app.cli openapi --out ../frontend/openapi.json
 """
 
 import argparse
@@ -108,6 +109,15 @@ async def telegram_webhook(url: str | None) -> None:
     print(f"Вебхук зарегистрирован: {url}. В API нужен JOBRADAR_TELEGRAM__MODE=webhook")
 
 
+def dump_openapi(path: Path) -> None:
+    """Снимок схемы API для генерации типов frontend. БД и настройки не нужны."""
+    from app.main import app
+
+    schema = json.dumps(app.openapi(), ensure_ascii=False, indent=2)
+    path.write_text(f"{schema}\n", encoding="utf-8", newline="\n")
+    print(f"Схема OpenAPI записана: {path}")
+
+
 def _ask_password() -> str | None:
     password = getpass.getpass("Пароль: ")
     if password != getpass.getpass("Повторите пароль: "):
@@ -142,6 +152,9 @@ def main(argv: list[str] | None = None) -> int:
     target.add_argument("--url", help="публичный HTTPS-адрес /api/v1/telegram/webhook")
     target.add_argument("--delete", action="store_true")
 
+    openapi = commands.add_parser("openapi", help="выгрузить схему OpenAPI в файл")
+    openapi.add_argument("--out", required=True, type=Path)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "create-user":
@@ -156,6 +169,8 @@ def main(argv: list[str] | None = None) -> int:
             export_eval_set(args.out, args.limit)
         elif args.command == "telegram-link":
             asyncio.run(telegram_link(args.email))
+        elif args.command == "openapi":
+            dump_openapi(args.out)
         elif args.command == "telegram-webhook":
             asyncio.run(telegram_webhook(None if args.delete else args.url))
         else:

@@ -1,0 +1,97 @@
+/* Цвет — по вердикту (data-tone); у skip шкала светлее текста, чтобы цифра читалась. */
+.meter {
+  --tone: var(--skip);
+  --tone-soft: var(--skip-soft);
+
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 0.3rem;
+  color: var(--skip-text);
+}
+
+.meter[data-tone="apply"] {
+  --tone: var(--apply);
+  --tone-soft: var(--apply-soft);
+
+  color: var(--apply);
+}
+
+.meter[data-tone="maybe"] {
+  --tone: var(--maybe);
+  --tone-soft: var(--maybe-soft);
+
+  color: var(--maybe);
+}
+
+.score {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.bars {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 2px;
+  width: 100%;
+}
+
+.bars > span {
+  height: 6px;
+  border-radius: 1px;
+}
+
+.on {
+  background: var(--tone);
+}
+
+.off {
+  background: var(--tone-soft);
+}
+
+.caption {
+  font-size: var(--text-s);
+  font-weight: 500;
+}
+
+.meter[data-tone="none"] {
+  color: var(--ink-3);
+}
+
+.meter[data-tone="none"] .caption {
+  font-weight: 400;
+}
+
+/* В строке ленты: цифра над шкалой, колонка фиксированной ширины. */
+.row {
+  width: 3.5rem;
+}
+
+.row .score {
+  font-size: 1.75rem;
+}
+
+.row[data-tone="none"] .caption {
+  font-size: 0.6875rem;
+  line-height: 1.2;
+}
+
+/* В карточке: крупная цифра — первое, что видно. */
+.large {
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.large .score {
+  font-size: 4rem;
+}
+
+.large .bars > span {
+  height: 10px;
+}
+
+.large .caption {
+  font-size: var(--text-l);
+}

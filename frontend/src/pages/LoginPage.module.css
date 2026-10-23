@@ -1,0 +1,47 @@
+.page {
+  display: grid;
+  min-height: 100vh;
+  padding: 1.5rem;
+  place-items: center;
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+  max-width: 22rem;
+  padding: 2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.lead {
+  margin-top: -0.4rem;
+  color: var(--ink-2);
+}
+
+.field {
+  display: grid;
+  gap: 0.3rem;
+  font-weight: 500;
+}
+
+.error {
+  color: var(--blocker);
+}
+
+.hint {
+  color: var(--ink-3);
+  font-size: var(--text-s);
+}
+
+.hint code {
+  font-size: 0.95em;
+}

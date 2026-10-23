@@ -1,0 +1,179 @@
+/* Все наборы символов с unicode-range: браузер загрузит только кириллицу и латиницу. */
+@import "@fontsource/golos-text/400.css";
+@import "@fontsource/golos-text/500.css";
+@import "@fontsource/golos-text/600.css";
+
+:root {
+  /* Чернила и поверхности: прохладная светлая гамма, чтобы цвет вердикта читался сразу. */
+  --ink: #1c2430;
+  --ink-2: #4a5565;
+  --ink-3: #5f6978;
+  --bg: #f3f5f8;
+  --panel: #ffffff;
+  --line: #d6dbe2;
+  --line-soft: #e7ebf0;
+
+  /* Вердикты оценки и пробелы-блокеры. */
+  --apply: #1a6b4f;
+  --apply-soft: #e2f1ea;
+  --maybe: #8a5a0e;
+  --maybe-soft: #f7eddb;
+  --skip: #7d8796;
+  --skip-text: #5c6675;
+  --skip-soft: #eceef2;
+  --blocker: #b23a48;
+  --blocker-soft: #f8e5e7;
+
+  /* Действия пользователя. */
+  --action: #2f5bd3;
+  --action-hover: #2449b0;
+  --action-soft: #e6ecfb;
+
+  --font: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Модульная шкала 1.2 от 15 px. */
+  --text-s: 0.8125rem;
+  --text-m: 0.9375rem;
+  --text-l: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-xxl: 2rem;
+
+  --radius-s: 4px;
+  --radius-m: 8px;
+  --page-width: 72rem;
+
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--text-m);
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: var(--text-xl);
+}
+
+h2 {
+  font-size: var(--text-l);
+}
+
+h3 {
+  font-size: var(--text-m);
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--action);
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  color: var(--action-hover);
+}
+
+:focus-visible {
+  /* outline виден и в режиме высокой контрастности, в отличие от box-shadow. */
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+select,
+textarea {
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--panel);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--action);
+}
+
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--blocker);
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--action);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Приглушённый текст и текст ошибки — одни на все экраны. */
+.muted {
+  color: var(--ink-3);
+  font-size: var(--text-s);
+}
+
+.error-text {
+  color: var(--blocker);
+  font-size: var(--text-s);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

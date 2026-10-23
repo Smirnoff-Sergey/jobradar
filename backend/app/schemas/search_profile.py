@@ -18,7 +18,10 @@ class SearchProfileUpdate(BaseModel):
 
 
 class SearchProfileRead(SearchProfileUpdate):
-    model_config = ConfigDict(from_attributes=True)
+    # В ответе поля всегда есть: схема помечает их обязательными, типы frontend — без undefined.
+    model_config = ConfigDict(
+        from_attributes=True, json_schema_serialization_defaults_required=True
+    )
 
     updated_at: datetime
 

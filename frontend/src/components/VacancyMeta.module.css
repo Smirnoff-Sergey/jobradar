@@ -1,0 +1,29 @@
+.meta {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+}
+
+.salary {
+  color: var(--ink);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.noSalary {
+  color: var(--ink-3);
+}
+
+.origin {
+  color: var(--ink-3);
+  font-size: var(--text-s);
+}

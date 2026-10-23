@@ -58,9 +58,54 @@ jobs:
       - name: Тесты
         run: uv run pytest --cov --cov-report=term-missing --cov-fail-under=80
 
-  docker:
-    name: Сборка Docker-образа
+      # Типы frontend генерируются из этого снимка: схема в backend изменилась — обновите снимок.
+      - name: Снимок схемы OpenAPI актуален
+        run: |
+          uv run python -m app.cli openapi --out ../frontend/openapi.json
+          git diff --exit-code ../frontend/openapi.json
+
+  frontend:
+    name: Frontend — линтеры, типы и тесты
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Установка зависимостей
+        run: npm ci
+
+      - name: Типы API актуальны
+        run: |
+          npm run generate:api
+          git diff --exit-code src/api/schema.ts
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Тесты
+        run: npm test
+
+      - name: Сборка
+        run: npm run build
+
+  docker:
+    name: Сборка Docker-образа ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [backend, frontend]
     steps:
       - uses: actions/checkout@v7
 
@@ -68,7 +113,8 @@ jobs:
 
       - uses: docker/build-push-action@v7
         with:
-          context: backend
+          context: ${{ matrix.image }}
           push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Свой scope на образ, иначе кеши backend и frontend перезаписывают друг друга.
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

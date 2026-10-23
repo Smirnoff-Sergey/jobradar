@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 
 from app.api.errors import register_error_handlers
 from app.api.v1 import api_router
@@ -28,8 +29,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             yield
 
 
+def _operation_id(route: APIRoute) -> str:
+    # Имя обработчика вместо «list_vacancies_api_v1_vacancies_get»:
+    # из схемы генерируются типы frontend.
+    return route.name
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="JobRadar", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title="JobRadar",
+        version="0.1.0",
+        lifespan=lifespan,
+        generate_unique_id_function=_operation_id,
+    )
     register_error_handlers(app)
     app.include_router(api_router, prefix="/api/v1")
     return app

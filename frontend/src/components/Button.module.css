@@ -1,0 +1,61 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.button[aria-busy="true"] {
+  cursor: progress;
+}
+
+.primary {
+  background: var(--action);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--action-hover);
+}
+
+.secondary {
+  background: var(--panel);
+  border-color: var(--line);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--ink-3);
+}
+
+.quiet {
+  padding-inline: 0.5rem;
+  background: transparent;
+  color: var(--action);
+}
+
+.quiet:hover:not(:disabled) {
+  background: var(--action-soft);
+}
+
+.danger {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--blocker);
+}
+
+.danger:hover:not(:disabled) {
+  border-color: var(--blocker);
+}

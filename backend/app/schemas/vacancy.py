@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import Any, Self
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict
 
 from app.domain.applications import ApplicationStatus
-from app.domain.evaluation import EvaluationStatus, Verdict
+from app.domain.evaluation import EvaluationStatus, Gap, Match, Verdict
 from app.repositories.vacancies import VacancyRow
 
 
@@ -24,8 +24,8 @@ class EvaluationRead(BaseModel):
     verdict: Verdict | None
     model: str | None
     prompt_version: str
-    matches: list[dict[str, Any]] | None
-    gaps: list[dict[str, Any]] | None
+    matches: list[Match] | None
+    gaps: list[Gap] | None
     dealbreakers: list[str] | None
     error: str | None
     updated_at: datetime
@@ -40,7 +40,9 @@ class ApplicationBrief(BaseModel):
 
 
 class VacancyListItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True, json_schema_serialization_defaults_required=True
+    )
 
     id: int
     source_code: str

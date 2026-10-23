@@ -1,4 +1,4 @@
-# Хуки запускают инструменты из окружения backend, версии берутся из uv.lock.
+# Хуки запускают инструменты из окружений backend и frontend: версии — из uv.lock и package-lock.json.
 repos:
   - repo: local
     hooks:
@@ -21,4 +21,18 @@ repos:
         entry: uv run --directory backend mypy
         language: system
         types: [python]
+        pass_filenames: false
+
+      - id: eslint
+        name: eslint
+        entry: npm --prefix frontend run lint
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+
+      - id: tsc
+        name: tsc
+        entry: npm --prefix frontend run typecheck
+        language: system
+        files: ^frontend/
         pass_filenames: false

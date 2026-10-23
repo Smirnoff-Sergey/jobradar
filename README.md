@@ -9,7 +9,8 @@
 - этап 1 — каркас: API на FastAPI, PostgreSQL, миграции, JWT-авторизация, тесты и CI;
 - этап 2 — сбор вакансий: адаптер getmatch, фоновые задачи Celery по расписанию, upsert без дублей, фильтр по критериям поиска;
 - этап 3 — LLM-оценка вакансий по резюме: структурированный ответ модели, проверка схемой, дневной лимит запросов, только бесплатные модели. Цифры качества на реальном размеченном наборе пока нет — она появится после разметки;
-- этап 4 — Telegram-бот на aiogram 3: вакансии с вердиктом `apply` приходят в Telegram ровно один раз, кнопки под сообщением ведут журнал откликов.
+- этап 4 — Telegram-бот на aiogram 3: вакансии с вердиктом `apply` приходят в Telegram ровно один раз, кнопки под сообщением ведут журнал откликов;
+- этап 5 — веб-интерфейс на React и TypeScript: лента с фильтрами, карточка с оценкой, журнал откликов, настройки резюме, критериев и Telegram.
 
 ## Стек
 
@@ -18,9 +19,10 @@
 - Фоновые задачи: Celery, Redis, Celery Beat
 - Интеграции: getmatch, OpenRouter (OpenAI-совместимый API) — httpx, повторы с экспоненциальной задержкой; Telegram Bot API — aiogram 3 (polling или вебхук)
 - LLM: структурированный ответ по JSON-схеме, проверка Pydantic, бесплатные модели
-- Качество: pytest, ruff, mypy (strict), GitHub Actions
+- Frontend: React 19, TypeScript (strict), Vite, TanStack Query, React Router, типизированный клиент `openapi-fetch` (типы генерируются из OpenAPI), CSS Modules, nginx
+- Качество: pytest, ruff, mypy (strict), ESLint, Vitest, GitHub Actions
 - Запуск: Docker Compose
-- В планах: frontend на React и TypeScript, адаптер hh.ru
+- В планах: генерация сопроводительных писем, адаптер hh.ru
 
 ## Быстрый старт
 
@@ -39,11 +41,11 @@ docker compose exec api python -m app.cli load-resume --email you@example.com --
 docker compose exec api python -m app.cli telegram-link --email you@example.com
 ```
 
-Документация API: http://localhost:8000/docs
+Веб-интерфейс: http://localhost:8080 (порт — `FRONTEND_PORT`). Документация API: http://localhost:8000/docs, она же — http://localhost:8080/docs.
 
 Регистрации нет: сервис рассчитан на одного владельца, пользователь создаётся командой `create-user`.
 
-Compose поднимает PostgreSQL, Redis, одноразовый контейнер миграций, API, воркер Celery (очереди `celery`, `details`, `llm`, `notify`), Celery Beat и Telegram-бота. Beat запускает сбор по cron-выражению `JOBRADAR_COLLECTOR__SCHEDULE_CRON` (по умолчанию каждый час в :00 UTC), досыл оценок каждый час в :30 и досыл уведомлений каждые 10 минут; вручную — `POST /api/v1/sources/getmatch/run`. После создания пользователя откройте `GET /api/v1/search-profile`: профиль создастся с критериями по умолчанию и уже собранные вакансии перефильтруются.
+Compose поднимает PostgreSQL, Redis, одноразовый контейнер миграций, API, воркер Celery (очереди `celery`, `details`, `llm`, `notify`), Celery Beat, Telegram-бота и nginx с веб-интерфейсом. Beat запускает сбор по cron-выражению `JOBRADAR_COLLECTOR__SCHEDULE_CRON` (по умолчанию каждый час в :00 UTC), досыл оценок каждый час в :30 и досыл уведомлений каждые 10 минут; вручную — `POST /api/v1/sources/getmatch/run`. После создания пользователя откройте `GET /api/v1/search-profile`: профиль создастся с критериями по умолчанию и уже собранные вакансии перефильтруются.
 
 > OpenRouter не обслуживает запросы с российских IP-адресов (ответ `403`). На сервере в России оценка уйдёт в паузу; качество можно проверять локально скриптом `scripts/eval.py`.
 
@@ -154,6 +156,28 @@ backend/
 
 Задачи Celery — тонкие обёртки: каждая запускает `asyncio.run` и создаёт движок БД без пула, потому что соединения asyncpg привязаны к event loop. API ставит задачи через интерфейс `TaskQueue` и не зависит от Celery; в тестах его заменяет фейк, поэтому Redis для тестов не нужен. Клиент LLM скрыт за протоколом `LLMClient` — провайдер меняется без правки бизнес-логики; так же сервисы уведомлений видят только протокол `TelegramClient`, а исключения aiogram переводятся в ошибки проекта.
 
+## Устройство frontend
+
+```
+frontend/
+  openapi.json        # снимок схемы API: python -m app.cli openapi --out ../frontend/openapi.json
+  src/
+    api/              # schema.ts (генерируется), клиент с JWT, хуки TanStack Query
+    components/       # общие компоненты: балл, статусы, состояния загрузки и ошибок
+    lib/              # чистые функции: форматирование, фильтры ленты, разбор ошибок API
+    pages/            # экраны: вход, лента, карточка, отклики, настройки
+    styles/           # цвета, шрифт и базовые стили
+  nginx.conf          # раздача сборки и прокси /api, /docs в контейнер api
+```
+
+Типы запросов и ответов генерируются из схемы OpenAPI (`openapi-typescript`), клиент `openapi-fetch` проверяет пути, параметры и тела запросов при компиляции. CI сверяет снимок схемы с backend и сгенерированные типы со снимком: изменили API и забыли обновить типы — сборка упадёт.
+
+Access-токен хранится в памяти, refresh — в `localStorage`. Клиент подставляет токен в запросы, на ответ `401` один раз обновляет пару и повторяет запрос; параллельные запросы ждут общее обновление. Истёк refresh-токен — выход на страницу входа.
+
+Фоновые задачи (переоценка, сбор, перефильтровка) API возвращает как id задачи: интерфейс опрашивает `GET /api/v1/tasks/{id}` с растущим интервалом и после завершения обновляет затронутые данные. Описание вакансии приходит HTML-разметкой источника и выводится только после очистки DOMPurify.
+
+В интерфейсе и API один адрес: nginx проксирует `/api`, поэтому CORS не нужен. Dev-сервер Vite проксирует `/api` так же — на `JOBRADAR_API_URL` (по умолчанию `http://localhost:8000`).
+
 ## Разработка
 
 Нужны [uv](https://docs.astral.sh/uv/) и PostgreSQL для интеграционных тестов. Ключ LLM и токен бота для тестов не нужны.
@@ -181,6 +205,22 @@ uv run pytest --cov
 - внешние HTTP-запросы (getmatch, OpenRouter) мокаются через `respx`, LLM — фейковым клиентом; сеть в тестах не нужна;
 - обработчики бота проверяются через диспетчер aiogram с подменённой сессией Bot API: обновление на входе, вызовы API на выходе;
 - задачи Celery проверяются целиком: настоящий `asyncio.run`, своя сессия БД, замоканные внешние сервисы.
+
+Frontend (Node.js 24):
+
+```bash
+cd frontend
+npm ci
+npm run dev            # http://localhost:5173, /api — на JOBRADAR_API_URL
+npm run lint
+npm run typecheck
+npm test               # Vitest: форматирование, фильтры, ошибки, обновление токена
+npm run build
+
+# после изменения API: снимок схемы и типы
+(cd ../backend && uv run python -m app.cli openapi --out ../frontend/openapi.json)
+npm run generate:api
+```
 
 Хуки pre-commit: `uv run --directory backend pre-commit install`.
 

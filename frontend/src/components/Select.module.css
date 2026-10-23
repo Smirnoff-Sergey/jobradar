@@ -1,0 +1,10 @@
+.field {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.label {
+  color: var(--ink-3);
+  font-size: var(--text-s);
+}

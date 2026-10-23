@@ -1,0 +1,26 @@
+/* Цвет — по смыслу: синий — в работе, зелёный — пригласили, красный — отказ, серый — остальное. */
+.pill {
+  justify-self: start;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  background: var(--skip-soft);
+  color: var(--ink-2);
+  font-size: var(--text-s);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pill:is([data-status="letter_ready"], [data-status="applied"]) {
+  background: var(--action-soft);
+  color: var(--action-hover);
+}
+
+.pill[data-status="invited"] {
+  background: var(--apply-soft);
+  color: var(--apply);
+}
+
+.pill[data-status="rejected"] {
+  background: var(--blocker-soft);
+  color: var(--blocker);
+}

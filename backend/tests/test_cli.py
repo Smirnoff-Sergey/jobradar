@@ -1,4 +1,6 @@
+import json
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -44,3 +46,18 @@ def test_create_user_command_reports_app_error(
 
     assert cli.main(["create-user", "--email", "owner@example.com"]) == 1
     assert "уже есть" in capsys.readouterr().err
+
+
+def test_openapi_command(tmp_path: Path) -> None:
+    out = tmp_path / "openapi.json"
+
+    assert cli.main(["openapi", "--out", str(out)]) == 0
+    schema = json.loads(out.read_text(encoding="utf-8"))
+    operation_ids = [
+        operation["operationId"] for path in schema["paths"].values() for operation in path.values()
+    ]
+    # Имена обработчиков, без суффиксов пути и метода — из них генерируются типы frontend.
+    assert "list_vacancies" in operation_ids
+    assert len(operation_ids) == len(set(operation_ids))
+    evaluation = schema["components"]["schemas"]["EvaluationRead"]["properties"]
+    assert "Match" in json.dumps(evaluation["matches"])

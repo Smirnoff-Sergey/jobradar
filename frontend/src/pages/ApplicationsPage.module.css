@@ -1,0 +1,109 @@
+.page {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.filter {
+  width: 12rem;
+}
+
+.row {
+  padding: 0.9rem 1.25rem;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 9rem 8.5rem auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.vacancy {
+  display: grid;
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.date {
+  font-variant-numeric: tabular-nums;
+}
+
+.notesPreview {
+  max-width: 72ch;
+  margin-top: 0.35rem;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--text-s);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.details {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1rem;
+  padding: 1rem 0 0.5rem;
+  border-top: 1px dashed var(--line);
+}
+
+.section {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 44rem;
+}
+
+.section h3 {
+  color: var(--ink-2);
+  font-size: var(--text-s);
+}
+
+.history {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history li {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  gap: 1rem;
+}
+
+.history time {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 40rem) {
+  .row {
+    padding: 0.9rem;
+  }
+
+  .summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .date {
+    display: none;
+  }
+
+  .summary > :nth-child(2) {
+    grid-row: 2;
+  }
+}
