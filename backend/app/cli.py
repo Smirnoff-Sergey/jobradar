@@ -4,6 +4,8 @@ python -m app.cli create-user --email owner@example.com
 python -m app.cli load-resume --email owner@example.com --file резюме.txt [--title ...]
 python -m app.cli export-eval-set --out vacancies.jsonl [--limit 20]
 python -m app.cli llm-unpause
+python -m app.cli telegram-link --email owner@example.com
+python -m app.cli telegram-webhook --url https://example.com/api/v1/telegram/webhook | --delete
 """
 
 import argparse
@@ -21,7 +23,9 @@ from app.llm.prompts import vacancy_for_prompt
 from app.services.auth import AuthService
 from app.services.llm_budget import LLMBudget
 from app.services.resumes import ResumeService
+from app.services.telegram_link import TelegramLinkService
 from app.services.vacancies import VacancyService
+from app.telegram.client import call, open_bot, open_telegram_client
 
 
 async def create_user(email: str, password: str) -> None:
@@ -76,6 +80,34 @@ async def llm_unpause() -> None:
     print(f"Остановка LLM-оценки снята (была: {usage.pause_reason or 'нет'})")
 
 
+async def telegram_link(email: str) -> None:
+    settings = get_settings()
+    async with (
+        open_session_factory(settings.database_url) as session_factory,
+        session_factory() as session,
+        open_telegram_client(settings.telegram) as client,
+    ):
+        link = await TelegramLinkService(session, settings.telegram).issue_link_for_email(
+            email, client
+        )
+    expires = link.expires_at.astimezone().strftime("%H:%M")
+    print(f"Откройте в Telegram и нажмите «Start» (действует до {expires}):\n{link.url}")
+
+
+async def telegram_webhook(url: str | None) -> None:
+    """Регистрирует вебхук с секретом из настроек или удаляет его (возврат к polling)."""
+    settings = get_settings().telegram
+    async with open_bot(settings) as bot:
+        if url is None:
+            await call(bot.delete_webhook())
+            print("Вебхук удалён: обновления снова забирает python -m app.bot (polling)")
+            return
+        if settings.webhook_secret is None:
+            raise AppError("Не задан JOBRADAR_TELEGRAM__WEBHOOK_SECRET")
+        await call(bot.set_webhook(url, secret_token=settings.webhook_secret.get_secret_value()))
+    print(f"Вебхук зарегистрирован: {url}. В API нужен JOBRADAR_TELEGRAM__MODE=webhook")
+
+
 def _ask_password() -> str | None:
     password = getpass.getpass("Пароль: ")
     if password != getpass.getpass("Повторите пароль: "):
@@ -102,6 +134,14 @@ def main(argv: list[str] | None = None) -> int:
 
     commands.add_parser("llm-unpause", help="снять аварийную остановку LLM-оценки")
 
+    link = commands.add_parser("telegram-link", help="ссылка для привязки чата Telegram")
+    link.add_argument("--email", required=True)
+
+    webhook = commands.add_parser("telegram-webhook", help="зарегистрировать или удалить вебхук")
+    target = webhook.add_mutually_exclusive_group(required=True)
+    target.add_argument("--url", help="публичный HTTPS-адрес /api/v1/telegram/webhook")
+    target.add_argument("--delete", action="store_true")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "create-user":
@@ -114,6 +154,10 @@ def main(argv: list[str] | None = None) -> int:
             asyncio.run(load_resume(args.email, text, args.title))
         elif args.command == "export-eval-set":
             export_eval_set(args.out, args.limit)
+        elif args.command == "telegram-link":
+            asyncio.run(telegram_link(args.email))
+        elif args.command == "telegram-webhook":
+            asyncio.run(telegram_webhook(None if args.delete else args.url))
         else:
             asyncio.run(llm_unpause())
     except AppError as exc:

@@ -99,3 +99,31 @@ class PaidUsageError(AppError):
 
     code = "paid_usage"
     message = "Запрос к LLM оказался платным — оценка остановлена"
+
+
+class TelegramDisabledError(AppError):
+    code = "telegram_disabled"
+    message = "Telegram-бот выключен: не задан токен"
+
+
+class ChatUnavailableError(PermanentExternalError):
+    """Писать в чат больше нельзя: бот заблокирован, чат удалён. Чат отвязывается."""
+
+    code = "telegram_chat_unavailable"
+    message = "Чат Telegram недоступен"
+
+
+class InvalidStatusError(AppError):
+    code = "invalid_status"
+    message = "Неизвестный статус отклика"
+
+
+class StatusLockedError(ConflictError):
+    """Кнопка в старом сообщении не откатывает статус, выставленный позже («пригласили»)."""
+
+    code = "status_locked"
+    message = "Статус отклика уже изменён"
+
+    def __init__(self, current: str) -> None:
+        super().__init__()
+        self.current = current

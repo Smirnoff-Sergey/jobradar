@@ -20,7 +20,7 @@ from app.db.models import SearchProfile, User
 from app.main import create_app
 from app.services.auth import AuthService
 from tests.constants import USER_EMAIL, USER_PASSWORD
-from tests.fakes import FakeTaskQueue
+from tests.fakes import TEST_BOT_TOKEN, FakeTaskQueue
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 TEST_DATABASE_URL_ENV = "JOBRADAR_TEST_DATABASE_URL"
@@ -139,6 +139,20 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 def llm_enabled(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Оценка включена: задан ключ LLM (сам клиент в тестах не используется)."""
     monkeypatch.setenv("JOBRADAR_LLM__API_KEY", "test-key")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+WEBHOOK_SECRET = "webhook-secret"
+
+
+@pytest.fixture
+def telegram_enabled(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Бот включён в режиме webhook (сам Telegram в тестах подменяется)."""
+    monkeypatch.setenv("JOBRADAR_TELEGRAM__BOT_TOKEN", TEST_BOT_TOKEN)
+    monkeypatch.setenv("JOBRADAR_TELEGRAM__MODE", "webhook")
+    monkeypatch.setenv("JOBRADAR_TELEGRAM__WEBHOOK_SECRET", WEBHOOK_SECRET)
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

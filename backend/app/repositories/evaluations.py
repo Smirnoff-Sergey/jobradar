@@ -2,13 +2,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, and_, delete, or_, select
+from sqlalchemy import BigInteger, and_, delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Evaluation, Resume, Vacancy, VacancyFilterResult
 from app.domain.evaluation import PENDING
 from app.repositories.arrays import in_array
+from app.repositories.claims import settled_or_fresh
 
 
 @dataclass(slots=True)
@@ -109,7 +110,12 @@ class EvaluationRepository:
                 Evaluation.vacancy_id == Vacancy.id,
                 Evaluation.resume_id == Resume.id,
                 Evaluation.prompt_version == prompt_version,
-                or_(Evaluation.status != PENDING, Evaluation.updated_at >= stale_before),
+                settled_or_fresh(
+                    Evaluation.status,
+                    Evaluation.updated_at,
+                    pending=PENDING,
+                    stale_before=stale_before,
+                ),
             )
             .exists()
         )

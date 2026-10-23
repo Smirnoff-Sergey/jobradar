@@ -17,6 +17,7 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "celery[redis]>=5.5",
     "httpx>=0.28",
+    "aiogram>=3.31,<4",
 ]
 
 [dependency-groups]

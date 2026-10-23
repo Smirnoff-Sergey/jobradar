@@ -61,13 +61,20 @@ services:
 
   worker:
     <<: *backend
-    command: ["celery", "-A", "app.tasks.celery_app", "worker", "-Q", "celery,details,llm", "--loglevel=INFO", "--concurrency=2"]
+    command: ["celery", "-A", "app.tasks.celery_app", "worker", "-Q", "celery,details,llm,notify", "--loglevel=INFO", "--concurrency=2"]
     depends_on: *after-migrations
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # Telegram-бот в режиме polling: кнопки и привязка чата. Без токена сразу завершается.
+  # Ровно один экземпляр: Telegram не отдаёт обновления двум getUpdates одновременно.
+  bot:
+    <<: *backend
+    command: ["python", "-m", "app.bot"]
+    depends_on: *after-migrations
 
   # Расписание: ровно один экземпляр, иначе задачи будут ставиться дважды.
   beat:

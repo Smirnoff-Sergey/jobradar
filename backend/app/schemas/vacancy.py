@@ -3,6 +3,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict
 
+from app.domain.applications import ApplicationStatus
 from app.domain.evaluation import EvaluationStatus, Verdict
 from app.repositories.vacancies import VacancyRow
 
@@ -30,6 +31,14 @@ class EvaluationRead(BaseModel):
     updated_at: datetime
 
 
+class ApplicationBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: ApplicationStatus
+    updated_at: datetime
+
+
 class VacancyListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -48,6 +57,7 @@ class VacancyListItem(BaseModel):
     is_active: bool
     filter: FilterResultRead | None = None
     evaluation: EvaluationRead | None = None
+    application: ApplicationBrief | None = None
 
     @classmethod
     def build(cls, row: VacancyRow) -> Self:
@@ -55,6 +65,7 @@ class VacancyListItem(BaseModel):
             update={
                 "filter": row.decision and FilterResultRead.model_validate(row.decision),
                 "evaluation": row.evaluation and EvaluationRead.model_validate(row.evaluation),
+                "application": row.application and ApplicationBrief.model_validate(row.application),
             }
         )
 

@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Literal, Self
 
-from pydantic import BaseModel, SecretStr, field_validator
+from pydantic import BaseModel, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 MIN_JWT_SECRET_LENGTH = 32
@@ -58,6 +59,11 @@ class CollectorSettings(BaseModel):
         return value
 
 
+def _blank_to_none(value: object) -> object:
+    # «JOBRADAR_X=» в .env означает «не задано», а не секрет из пустой строки.
+    return None if isinstance(value, str) and not value.strip() else value
+
+
 FREE_MODEL_SUFFIX = ":free"
 
 
@@ -94,8 +100,7 @@ class LLMSettings(BaseModel):
     @field_validator("api_key", mode="before")
     @classmethod
     def _empty_key_is_none(cls, value: object) -> object:
-        # «JOBRADAR_LLM__API_KEY=» в .env означает «ключа нет», а не ключ из пустой строки.
-        return None if isinstance(value, str) and not value.strip() else value
+        return _blank_to_none(value)
 
     @field_validator("models")
     @classmethod
@@ -109,6 +114,36 @@ class LLMSettings(BaseModel):
         return value
 
 
+class TelegramSettings(BaseModel):
+    """Telegram-бот. Без токена уведомления выключены, остальной сервис работает."""
+
+    bot_token: SecretStr | None = None
+    # polling — отдельный процесс `python -m app.bot` (публичный адрес не нужен);
+    # webhook — обновления принимает API, адрес регистрируется командой CLI.
+    mode: Literal["polling", "webhook"] = "polling"
+    # Telegram присылает его в заголовке X-Telegram-Bot-Api-Secret-Token каждого вебхука.
+    webhook_secret: SecretStr | None = None
+    link_code_ttl_minutes: int = 15
+    request_timeout_seconds: float = 30.0
+    # Telegram допускает около 30 сообщений в секунду; уведомлений столько не бывает.
+    rate_limit: str = "20/m"
+
+    @property
+    def enabled(self) -> bool:
+        return self.bot_token is not None
+
+    @field_validator("bot_token", "webhook_secret", mode="before")
+    @classmethod
+    def _empty_is_none(cls, value: object) -> object:
+        return _blank_to_none(value)
+
+    @model_validator(mode="after")
+    def _webhook_needs_secret(self) -> Self:
+        if self.mode == "webhook" and self.webhook_secret is None:
+            raise ValueError("для режима webhook задайте JOBRADAR_TELEGRAM__WEBHOOK_SECRET")
+        return self
+
+
 class Settings(DatabaseSettings):
     """Вложенные блоки задаются через `__`: JOBRADAR_AUTH__JWT_SECRET, JOBRADAR_REDIS__URL."""
 
@@ -116,6 +151,7 @@ class Settings(DatabaseSettings):
     redis: RedisSettings = RedisSettings()
     collector: CollectorSettings = CollectorSettings()
     llm: LLMSettings = LLMSettings()
+    telegram: TelegramSettings = TelegramSettings()
 
 
 @lru_cache

@@ -6,13 +6,16 @@
 import asyncio
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 import respx
+from aiogram import Bot
+from aiogram.methods import DeleteWebhook, SetWebhook
 from celery import Celery
 from celery.schedules import crontab
 from sqlalchemy import text
@@ -29,8 +32,20 @@ from app.tasks import jobs
 from app.tasks.celery_app import celery_app, cron_schedule
 from app.tasks.names import COLLECT_SOURCE, DETAILS_QUEUE, FETCH_DETAILS, REFILTER_USER
 from app.tasks.queue import CeleryTaskQueue
+from app.telegram.client import AiogramTelegramClient
 from tests.conftest import TEST_DATABASE_URL_ENV
-from tests.fakes import FakeTaskQueue, completion_body, llm_answer, load_getmatch_fixture
+from tests.fakes import (
+    BOT_USERNAME,
+    CHAT_ID,
+    TEST_BOT_TOKEN,
+    FakeTaskQueue,
+    FakeTelegram,
+    RecordingSession,
+    completion_body,
+    llm_answer,
+    load_getmatch_fixture,
+    recording_bot,
+)
 
 TASK_USER = "tasks@example.com"
 
@@ -221,3 +236,84 @@ def test_evaluation_pipeline(
 
 def test_evaluate_task_disabled_without_key() -> None:
     assert jobs.evaluate_pair.run(1, 1) == "disabled"
+
+
+def test_notify_task_disabled_without_token() -> None:
+    assert jobs.notify_vacancy.run(1, 1) == "disabled"
+
+
+@respx.mock
+def test_notification_pipeline(
+    worker_queue: FakeTaskQueue, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Оценка «apply» → постановка уведомления → отправка ровно один раз."""
+    monkeypatch.setenv("JOBRADAR_LLM__API_KEY", "test-key")
+    monkeypatch.setenv("JOBRADAR_TELEGRAM__BOT_TOKEN", TEST_BOT_TOKEN)
+    get_settings.cache_clear()
+    telegram = FakeTelegram()
+
+    @asynccontextmanager
+    async def fake_client() -> AsyncIterator[FakeTelegram]:
+        yield telegram
+
+    monkeypatch.setattr(jobs, "telegram_client", fake_client)
+    user_id = run_sql(
+        "INSERT INTO users (email, password_hash, telegram_chat_id, telegram_linked_at)"
+        f" VALUES ('{TASK_USER}', 'x', {CHAT_ID}, now() - interval '1 day') RETURNING id"
+    )
+    run_sql(f"INSERT INTO search_profiles (user_id) VALUES ({user_id})")
+    resume_file = tmp_path / "resume.txt"
+    resume_file.write_text("Python-разработчик, 4 года, Django, PostgreSQL", encoding="utf-8")
+    assert cli.main(["load-resume", "--email", TASK_USER, "--file", str(resume_file)]) == 0
+    resume_id = run_sql(f"SELECT id FROM resumes WHERE user_id = {user_id}")
+    respx.get(OFFERS_URL).respond(json=load_getmatch_fixture())
+    respx.get(f"{OFFERS_URL}/101").respond(json={"description": "<p>Python, PostgreSQL</p>"})
+    respx.post(f"{get_settings().llm.base_url}/chat/completions").respond(
+        json=completion_body(llm_answer())
+    )
+    jobs.collect_source.run("getmatch")
+    vacancy_id = run_sql("SELECT id FROM vacancies WHERE external_id = '101'")
+    jobs.fetch_details.run(vacancy_id)
+
+    assert jobs.evaluate_pair.run(vacancy_id, resume_id) == "done"
+    assert worker_queue.notifications == [(user_id, vacancy_id)]
+    assert jobs.notify_vacancy.run(user_id, vacancy_id) == "sent"
+    assert jobs.notify_vacancy.run(user_id, vacancy_id) == "skipped"
+    assert jobs.notify_pending.run() == 0
+    [(chat_id, message)] = telegram.sent
+    assert chat_id == CHAT_ID
+    assert "Оценка: <b>85</b>/100" in message.text
+
+
+def test_telegram_cli(
+    worker_queue: FakeTaskQueue, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("JOBRADAR_TELEGRAM__BOT_TOKEN", TEST_BOT_TOKEN)
+    monkeypatch.setenv("JOBRADAR_TELEGRAM__WEBHOOK_SECRET", "cli-secret")
+    get_settings.cache_clear()
+    session = RecordingSession()
+
+    @asynccontextmanager
+    async def fake_bot(_: object) -> AsyncIterator[Bot]:
+        yield recording_bot(session)
+
+    @asynccontextmanager
+    async def fake_client(_: object) -> AsyncIterator[AiogramTelegramClient]:
+        yield AiogramTelegramClient(recording_bot(session))
+
+    monkeypatch.setattr(cli, "open_bot", fake_bot)
+    monkeypatch.setattr(cli, "open_telegram_client", fake_client)
+    run_sql(f"INSERT INTO users (email, password_hash) VALUES ('{TASK_USER}', 'x')")
+
+    assert cli.main(["telegram-link", "--email", TASK_USER]) == 0
+    assert f"https://t.me/{BOT_USERNAME}?start=" in capsys.readouterr().out
+    assert run_sql(
+        f"SELECT telegram_link_code_hash IS NOT NULL FROM users WHERE email = '{TASK_USER}'"
+    )
+    assert cli.main(["telegram-link", "--email", "nobody@example.com"]) == 1
+
+    assert cli.main(["telegram-webhook", "--url", "https://example.com/hook"]) == 0
+    [webhook] = session.calls(SetWebhook)
+    assert (webhook.url, webhook.secret_token) == ("https://example.com/hook", "cli-secret")
+    assert cli.main(["telegram-webhook", "--delete"]) == 0
+    assert len(session.calls(DeleteWebhook)) == 1

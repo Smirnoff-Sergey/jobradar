@@ -7,11 +7,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.errors import NotAuthenticatedError
+from app.core.errors import NotAuthenticatedError, TelegramDisabledError
 from app.db.models import User
 from app.services.auth import AuthService
 from app.services.evaluation import EvaluationScheduler
 from app.services.queue import TaskQueue
+from app.telegram.client import TelegramClient, open_telegram_client
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -64,3 +65,13 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+async def get_telegram_client(settings: SettingsDep) -> AsyncIterator[TelegramClient]:
+    if not settings.telegram.enabled:
+        raise TelegramDisabledError
+    async with open_telegram_client(settings.telegram) as client:
+        yield client
+
+
+TelegramClientDep = Annotated[TelegramClient, Depends(get_telegram_client)]

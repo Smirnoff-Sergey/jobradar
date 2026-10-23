@@ -20,6 +20,7 @@ from app.llm.openrouter import OpenRouterClient
 from app.services.collector import CollectorService
 from app.services.details import AdapterFactory, VacancyDetailsService
 from app.services.evaluation import EvaluationScheduler, EvaluationService
+from app.services.notifications import NotificationScheduler, NotificationService
 from app.services.search_profiles import SearchProfileService
 from app.sources.registry import create_adapter
 from app.tasks.celery_app import celery_app
@@ -28,9 +29,12 @@ from app.tasks.names import (
     EVALUATE_PENDING,
     EVALUATE_VACANCY,
     FETCH_DETAILS,
+    NOTIFY_PENDING,
+    NOTIFY_VACANCY,
     REFILTER_USER,
 )
 from app.tasks.queue import CeleryTaskQueue
+from app.telegram.client import TelegramClient, open_telegram_client
 
 # Сбор getmatch занимает около минуты; лимиты не дают зависшей задаче навсегда занять воркер.
 COLLECT_SOFT_TIME_LIMIT = 25 * 60
@@ -64,8 +68,18 @@ async def llm_client() -> AsyncIterator[LLMClient]:
         yield OpenRouterClient(client, settings)
 
 
+@asynccontextmanager
+async def telegram_client() -> AsyncIterator[TelegramClient]:
+    async with open_telegram_client(get_settings().telegram) as client:
+        yield client
+
+
 def scheduler(session: AsyncSession) -> EvaluationScheduler:
     return EvaluationScheduler(session, CeleryTaskQueue(), get_settings().llm)
+
+
+def notification_scheduler(session: AsyncSession) -> NotificationScheduler:
+    return NotificationScheduler(session, CeleryTaskQueue(), get_settings().telegram)
 
 
 @celery_app.task(
@@ -130,7 +144,11 @@ def evaluate_pair(vacancy_id: int, resume_id: int, force: bool = False) -> str:
     async def work(session: AsyncSession) -> str:
         async with llm_client() as llm:
             service = EvaluationService(session, settings, llm)
-            return await service.evaluate(vacancy_id, resume_id, force=force)
+            result = await service.evaluate(vacancy_id, resume_id, force=force)
+        if result == "done":
+            # Вердикт «apply» — уведомление уходит сразу, не дожидаясь досыла.
+            await notification_scheduler(session).queue_pending(vacancy_id)
+        return result
 
     return run_in_session(work)
 
@@ -139,5 +157,33 @@ def evaluate_pair(vacancy_id: int, resume_id: int, force: bool = False) -> str:
 def evaluate_pending() -> int:
     async def work(session: AsyncSession) -> int:
         return await scheduler(session).queue_pending()
+
+    return run_in_session(work)
+
+
+# Повторы — только для временных сбоев Telegram (сеть, 5xx, 429); захват при этом снимается.
+@celery_app.task(
+    name=NOTIFY_VACANCY,
+    autoretry_for=(TransientExternalError,),
+    retry_backoff=30,
+    retry_backoff_max=900,
+    max_retries=5,
+    rate_limit=get_settings().telegram.rate_limit,
+)
+def notify_vacancy(user_id: int, vacancy_id: int) -> str:
+    if not get_settings().telegram.enabled:
+        return "disabled"
+
+    async def work(session: AsyncSession) -> str:
+        async with telegram_client() as client:
+            return await NotificationService(session, client).notify(user_id, vacancy_id)
+
+    return run_in_session(work)
+
+
+@celery_app.task(name=NOTIFY_PENDING)
+def notify_pending() -> int:
+    async def work(session: AsyncSession) -> int:
+        return await notification_scheduler(session).queue_pending()
 
     return run_in_session(work)

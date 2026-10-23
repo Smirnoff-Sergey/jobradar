@@ -17,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Evaluation, Resume, Vacancy, VacancyFilterResult
+from app.db.models import Application, Evaluation, Resume, Vacancy, VacancyFilterResult
 from app.domain.vacancies import VacancyListQuery
 from app.repositories.arrays import in_array, not_in_array
 from app.sources.base import VacancyData
@@ -25,11 +25,12 @@ from app.sources.base import VacancyData
 
 @dataclass(frozen=True, slots=True)
 class VacancyRow:
-    """Вакансия с решением фильтра и оценкой по активному резюме пользователя."""
+    """Вакансия с решением фильтра, оценкой по активному резюме и откликом пользователя."""
 
     vacancy: Vacancy
     decision: VacancyFilterResult | None
     evaluation: Evaluation | None
+    application: Application | None
 
 
 # asyncpg ограничивает число параметров запроса (32767); пачки по 500 строк с запасом влезают.
@@ -59,12 +60,12 @@ def _row(source_code: str, item: VacancyData) -> dict[str, object]:
 
 def _for_user(
     user_id: int, prompt_version: str
-) -> Select[Vacancy, VacancyFilterResult, Evaluation]:
+) -> Select[Vacancy, VacancyFilterResult, Evaluation, Application]:
     active_resume = (
         select(Resume.id).where(Resume.user_id == user_id, Resume.is_active).scalar_subquery()
     )
     return (
-        select(Vacancy, VacancyFilterResult, Evaluation)
+        select(Vacancy, VacancyFilterResult, Evaluation, Application)
         .outerjoin(
             VacancyFilterResult,
             and_(
@@ -78,6 +79,10 @@ def _for_user(
                 Evaluation.resume_id == active_resume,
                 Evaluation.prompt_version == prompt_version,
             ),
+        )
+        .outerjoin(
+            Application,
+            and_(Application.vacancy_id == Vacancy.id, Application.user_id == user_id),
         )
     )
 
@@ -181,6 +186,8 @@ class VacancyRepository:
             stmt = stmt.where(Evaluation.verdict == query.verdict)
         if query.score_min is not None:
             stmt = stmt.where(Evaluation.score >= query.score_min)
+        if query.application_status is not None:
+            stmt = stmt.where(Application.status == query.application_status)
 
         total = await self._session.scalar(select(func.count()).select_from(stmt.subquery()))
         order: list[ColumnElement[Any]] = [

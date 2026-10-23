@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from app.domain.applications import ApplicationStatus
 from app.domain.evaluation import Verdict
 
 FilterStatus = Literal["passed", "rejected", "all"]
@@ -17,6 +18,7 @@ class VacancyListQuery:
     active_only: bool = True
     verdict: Verdict | None = None
     score_min: int | None = None
+    application_status: ApplicationStatus | None = None
     sort: VacancySort = "published"
     limit: int = 20
     offset: int = 0

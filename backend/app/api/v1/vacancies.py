@@ -3,11 +3,14 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 
 from app.api.deps import CurrentUserDep, EvaluationSchedulerDep, SessionDep
+from app.domain.applications import ApplicationStatus
 from app.domain.evaluation import Verdict
 from app.domain.vacancies import FilterStatus, VacancyListQuery, VacancySort
+from app.schemas.application import ApplicationRead, ApplicationSet
 from app.schemas.common import ErrorResponse
 from app.schemas.source import TaskAccepted
 from app.schemas.vacancy import VacancyListItem, VacancyPage, VacancyRead
+from app.services.applications import ApplicationService
 from app.services.vacancies import VacancyService
 
 router = APIRouter(prefix="/vacancies", tags=["vacancies"])
@@ -22,6 +25,9 @@ async def list_vacancies(
     active_only: bool = True,
     verdict: Annotated[Verdict | None, Query(description="Вердикт LLM-оценки")] = None,
     score_min: Annotated[int | None, Query(ge=0, le=100)] = None,
+    application_status: Annotated[
+        ApplicationStatus | None, Query(description="Статус отклика")
+    ] = None,
     sort: VacancySort = "published",
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -33,6 +39,7 @@ async def list_vacancies(
         active_only=active_only,
         verdict=verdict,
         score_min=score_min,
+        application_status=application_status,
         sort=sort,
         limit=limit,
         offset=offset,
@@ -61,3 +68,14 @@ async def request_reevaluation(
 ) -> TaskAccepted:
     """Переоценить вакансию по активному резюме. Прежняя оценка заменится только новой."""
     return TaskAccepted(task_id=await scheduler.request_reevaluation(user.id, vacancy_id))
+
+
+@router.put("/{vacancy_id}/application", responses={404: {"model": ErrorResponse}})
+async def set_application(
+    vacancy_id: int, body: ApplicationSet, user: CurrentUserDep, session: SessionDep
+) -> ApplicationRead:
+    """Создать отклик на вакансию или сменить его статус — как кнопки бота."""
+    application = await ApplicationService(session).set_status(
+        user.id, vacancy_id, body.status, notes=body.notes
+    )
+    return ApplicationRead.model_validate(application)

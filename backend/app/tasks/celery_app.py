@@ -1,6 +1,6 @@
 """Приложение Celery.
 
-Воркер:  celery -A app.tasks.celery_app worker -Q celery,details,llm
+Воркер:  celery -A app.tasks.celery_app worker -Q celery,details,llm,notify
 Beat:    celery -A app.tasks.celery_app beat
 """
 
@@ -18,6 +18,9 @@ from app.tasks.names import (
     EVALUATE_VACANCY,
     FETCH_DETAILS,
     LLM_QUEUE,
+    NOTIFY_PENDING,
+    NOTIFY_QUEUE,
+    NOTIFY_VACANCY,
 )
 
 
@@ -56,6 +59,7 @@ def create_celery() -> Celery:
         task_routes={
             FETCH_DETAILS: {"queue": DETAILS_QUEUE},
             EVALUATE_VACANCY: {"queue": LLM_QUEUE},
+            NOTIFY_VACANCY: {"queue": NOTIFY_QUEUE},
         },
         beat_schedule={
             **{
@@ -70,6 +74,11 @@ def create_celery() -> Celery:
             "evaluate-pending": {
                 "task": EVALUATE_PENDING,
                 "schedule": crontab(minute=30),
+            },
+            # Досыл уведомлений: бот был недоступен, чат привязали после оценки и т.п.
+            "notify-pending": {
+                "task": NOTIFY_PENDING,
+                "schedule": crontab(minute="*/10"),
             },
         },
     )

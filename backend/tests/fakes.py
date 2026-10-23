@@ -1,11 +1,19 @@
 import json
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.base import BaseSession
+from aiogram.enums import ParseMode
+from aiogram.methods import GetMe, SendMessage
+from aiogram.methods.base import TelegramMethod, TelegramType
+from aiogram.types import Chat, Message
+from aiogram.types import User as TelegramUser
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +26,7 @@ from app.services.collector import CollectorService
 from app.services.filtering import VacancyFilterService
 from app.services.queue import TaskStatus
 from app.sources.base import VacancyData
+from app.telegram.messages import OutgoingMessage
 
 GETMATCH_FIXTURE = Path(__file__).parent / "fixtures" / "getmatch_offers.json"
 
@@ -35,6 +44,7 @@ class FakeTaskQueue:
     details: list[int] = field(default_factory=list)
     refiltered: list[int] = field(default_factory=list)
     evaluations: list[tuple[int, int, bool]] = field(default_factory=list)
+    notifications: list[tuple[int, int]] = field(default_factory=list)
     statuses: dict[str, TaskStatus] = field(default_factory=dict)
 
     async def collect_source(self, source_code: str) -> str:
@@ -53,6 +63,10 @@ class FakeTaskQueue:
     ) -> str:
         self.evaluations.append((vacancy_id, resume_id, force))
         return f"evaluate-{len(self.evaluations)}"
+
+    async def notify_vacancy(self, user_id: int, vacancy_id: int) -> str:
+        self.notifications.append((user_id, vacancy_id))
+        return f"notify-{len(self.notifications)}"
 
     async def status(self, task_id: str) -> TaskStatus:
         return self.statuses.get(task_id, TaskStatus(task_id, "PENDING"))
@@ -211,3 +225,91 @@ async def add_evaluation(
     session.add(evaluation)
     await session.commit()
     return evaluation
+
+
+TEST_BOT_TOKEN = "42:test-token"
+BOT_USERNAME = "jobradar_test_bot"
+CHAT_ID = 777
+
+
+@dataclass
+class FakeTelegram:
+    """Клиент Bot API для сервисов: запоминает сообщения, исключения из errors бросает."""
+
+    errors: list[Exception] = field(default_factory=list)
+    sent: list[tuple[int, OutgoingMessage]] = field(default_factory=list)
+
+    async def bot_username(self) -> str:
+        return BOT_USERNAME
+
+    async def send_message(self, chat_id: int, message: OutgoingMessage) -> int:
+        if self.errors:
+            raise self.errors.pop(0)
+        self.sent.append((chat_id, message))
+        return len(self.sent)
+
+
+class RecordingSession(BaseSession):
+    """Сессия aiogram без сети: запоминает вызовы Bot API и отвечает правдоподобно.
+
+    errors — исключение, которое бросить на вызов метода данного типа.
+    """
+
+    def __init__(self, errors: dict[type[TelegramMethod[Any]], Exception] | None = None) -> None:
+        super().__init__()
+        self.requests: list[TelegramMethod[Any]] = []
+        self.errors = errors or {}
+
+    async def make_request(
+        self,
+        bot: Bot,
+        method: TelegramMethod[TelegramType],
+        timeout: int | None = None,  # noqa: ASYNC109
+    ) -> TelegramType:
+        self.requests.append(method)
+        if (error := self.errors.get(type(method))) is not None:
+            raise error
+        result: object = True
+        if isinstance(method, SendMessage):
+            result = Message(
+                message_id=len(self.requests),
+                date=datetime.now(UTC),
+                chat=Chat(id=int(method.chat_id), type="private"),
+                text=method.text,
+            )
+        elif isinstance(method, GetMe):
+            result = TelegramUser(id=42, is_bot=True, first_name="JobRadar", username=BOT_USERNAME)
+        return cast(TelegramType, result)
+
+    async def stream_content(
+        self,
+        url: str,
+        headers: dict[str, Any] | None = None,
+        timeout: int = 30,  # noqa: ASYNC109
+        chunk_size: int = 65536,
+        raise_for_status: bool = True,
+    ) -> AsyncGenerator[bytes]:
+        yield b""
+
+    async def close(self) -> None:
+        return None
+
+    def calls(self, method: type[TelegramMethod[Any]]) -> list[Any]:
+        return [request for request in self.requests if isinstance(request, method)]
+
+
+def recording_bot(session: RecordingSession) -> Bot:
+    return Bot(
+        TEST_BOT_TOKEN, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    )
+
+
+async def link_chat(session: AsyncSession, user: User, chat_id: int = CHAT_ID) -> None:
+    """Чат привязан заранее: оценки в тесте сделаны «после» привязки.
+
+    now() в PostgreSQL — время начала транзакции, а тест идёт в одной транзакции,
+    поэтому время привязки отодвинуто в прошлое.
+    """
+    user.telegram_chat_id = chat_id
+    user.telegram_linked_at = datetime.now(UTC) - timedelta(days=1)
+    await session.commit()

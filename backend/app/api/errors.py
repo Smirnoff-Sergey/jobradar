@@ -15,6 +15,7 @@ from app.core.errors import (
     InvalidPasswordError,
     LLMDisabledError,
     NotFoundError,
+    TelegramDisabledError,
     UnauthorizedError,
 )
 from app.schemas.common import ErrorDetail, ErrorResponse
@@ -34,6 +35,7 @@ _APP_ERROR_STATUSES: tuple[tuple[type[AppError], int], ...] = (
     (InvalidPasswordError, status.HTTP_422_UNPROCESSABLE_CONTENT),
     (ExternalServiceError, status.HTTP_502_BAD_GATEWAY),
     (LLMDisabledError, status.HTTP_503_SERVICE_UNAVAILABLE),
+    (TelegramDisabledError, status.HTTP_503_SERVICE_UNAVAILABLE),
 )
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
 
