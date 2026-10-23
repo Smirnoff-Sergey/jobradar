@@ -3,7 +3,7 @@ import json
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, runtime_checkable
 
 WorkFormat = Literal["remote", "hybrid", "office", "relocation"]
 ContractType = Literal["TK", "GPH", "IP", "SELF_EMPLOYED"]
@@ -38,6 +38,15 @@ class VacancyData:
         return hashlib.sha256(payload.encode()).hexdigest()
 
 
+@dataclass(frozen=True, slots=True)
+class ImportedVacancy:
+    """Одна вакансия, загруженная по ссылке: карточка сразу с полным описанием."""
+
+    data: VacancyData
+    description: str | None
+    is_active: bool = True
+
+
 class SourceAdapter(Protocol):
     code: str
 
@@ -47,4 +56,13 @@ class SourceAdapter(Protocol):
 
     async def fetch_description(self, external_id: str) -> str | None:
         """Полное описание вакансии (отдельный запрос)."""
+        ...
+
+
+@runtime_checkable
+class VacancyImporter(Protocol):
+    """Адаптер, который умеет загрузить одну вакансию по id из ссылки."""
+
+    async def fetch_vacancy(self, external_id: str) -> ImportedVacancy:
+        """Карточка вакансии. Нет такой — PermanentExternalError."""
         ...

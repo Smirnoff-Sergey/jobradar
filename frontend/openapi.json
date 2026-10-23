@@ -636,6 +636,83 @@
         }
       }
     },
+    "/api/v1/vacancies/import": {
+      "post": {
+        "tags": [
+          "vacancies"
+        ],
+        "summary": "Import Vacancy",
+        "description": "Добавить вакансию по ссылке на её страницу (getmatch.ru/vacancies/…).\n\nВакансия проходит фильтр по критериям пользователя; прошла — встаёт в очередь на оценку.\nПовтор с той же ссылкой не создаёт дубля.",
+        "operationId": "import_vacancy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VacancyImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VacancyRead"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/vacancies/{vacancy_id}": {
       "get": {
         "tags": [
@@ -747,6 +824,136 @@
               }
             },
             "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vacancies/{vacancy_id}/letter": {
+      "post": {
+        "tags": [
+          "vacancies"
+        ],
+        "summary": "Request Letter",
+        "description": "Заказать черновик сопроводительного письма по активному резюме.\n\nОтклика нет — он создаётся со статусом «новый»; готовый черновик переводит его\nв «письмо готово». Пока пишется один черновик, второй не заказать (409).",
+        "operationId": "request_letter",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vacancy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vacancy Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LetterAccepted"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vacancies/{vacancy_id}/letters": {
+      "get": {
+        "tags": [
+          "vacancies"
+        ],
+        "summary": "List Letters",
+        "description": "Черновики писем к вакансии, новые первыми.",
+        "operationId": "list_letters",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vacancy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vacancy Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LetterRead"
+                  },
+                  "title": "Response List Letters"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -1983,6 +2190,130 @@
         ],
         "title": "LLMUsageRead"
       },
+      "LetterAccepted": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "letter_id": {
+            "type": "integer",
+            "title": "Letter Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "letter_id"
+        ],
+        "title": "LetterAccepted"
+      },
+      "LetterFact": {
+        "properties": {
+          "claim": {
+            "type": "string",
+            "title": "Claim"
+          },
+          "resume_quote": {
+            "type": "string",
+            "title": "Resume Quote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "claim",
+          "resume_quote"
+        ],
+        "title": "LetterFact",
+        "description": "Сохранённый факт письма: утверждение и дословная цитата резюме."
+      },
+      "LetterRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "done",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LetterFact"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facts"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "text",
+          "facts",
+          "model",
+          "error",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LetterRead",
+        "description": "Черновик письма. facts — утверждения письма с цитатами из резюме, которые их подтверждают."
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -2580,6 +2911,22 @@
           "is_active"
         ],
         "title": "VacancyBrief"
+      },
+      "VacancyImport": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Url",
+            "description": "Ссылка на страницу вакансии"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "VacancyImport"
       },
       "VacancyListItem": {
         "properties": {

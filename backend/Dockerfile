@@ -22,4 +22,5 @@ RUN useradd --system --uid 1000 app
 USER app
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Журнал запросов пишет middleware API (JSON с request_id) — свой у uvicorn не нужен.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

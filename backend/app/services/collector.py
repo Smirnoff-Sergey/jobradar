@@ -74,6 +74,7 @@ class CollectorService:
             source.finish_run(
                 "failed", error=exc.message if isinstance(exc, AppError) else repr(exc)
             )
+            await self._sources.count_failure(code)
             await self._session.commit()
             raise
 

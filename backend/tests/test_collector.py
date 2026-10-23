@@ -168,6 +168,7 @@ async def test_source_failure_is_recorded(db_session: AsyncSession) -> None:
     assert await count_vacancies(db_session) == 0
     source = await get_source(db_session)
     assert (source.last_run_status, source.last_error) == ("failed", "getmatch: HTTP 503")
+    assert source.failed_runs == 1
 
 
 async def test_disabled_source_is_skipped(db_session: AsyncSession) -> None:

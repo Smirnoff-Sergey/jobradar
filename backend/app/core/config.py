@@ -50,6 +50,9 @@ class CollectorSettings(BaseModel):
     getmatch_page_size: int = 20
     # Не чаще стольких запросов карточек вакансий на воркер (формат Celery: "30/m").
     details_rate_limit: str = "30/m"
+    # Импорт по ссылке ждёт ответа источника в запросе API — таймаут и попытки короче.
+    import_timeout_seconds: float = 15.0
+    import_max_attempts: int = 2
 
     @field_validator("schedule_cron")
     @classmethod
@@ -144,6 +147,12 @@ class TelegramSettings(BaseModel):
         return self
 
 
+class LoggingSettings(BaseModel):
+    level: str = "INFO"
+    # json — для контейнеров и сбора логов, console — читать глазами при разработке.
+    format: Literal["json", "console"] = "json"
+
+
 class Settings(DatabaseSettings):
     """Вложенные блоки задаются через `__`: JOBRADAR_AUTH__JWT_SECRET, JOBRADAR_REDIS__URL."""
 
@@ -152,6 +161,7 @@ class Settings(DatabaseSettings):
     collector: CollectorSettings = CollectorSettings()
     llm: LLMSettings = LLMSettings()
     telegram: TelegramSettings = TelegramSettings()
+    logging: LoggingSettings = LoggingSettings()
 
 
 @lru_cache

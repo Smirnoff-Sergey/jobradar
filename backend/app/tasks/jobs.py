@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
+from celery import Task
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -20,6 +21,7 @@ from app.llm.openrouter import OpenRouterClient
 from app.services.collector import CollectorService
 from app.services.details import AdapterFactory, VacancyDetailsService
 from app.services.evaluation import EvaluationScheduler, EvaluationService
+from app.services.letters import LETTERS_DISABLED, LetterService, fail_letter
 from app.services.notifications import NotificationScheduler, NotificationService
 from app.services.search_profiles import SearchProfileService
 from app.sources.registry import create_adapter
@@ -29,6 +31,7 @@ from app.tasks.names import (
     EVALUATE_PENDING,
     EVALUATE_VACANCY,
     FETCH_DETAILS,
+    GENERATE_LETTER,
     NOTIFY_PENDING,
     NOTIFY_VACANCY,
     REFILTER_USER,
@@ -149,6 +152,36 @@ def evaluate_pair(vacancy_id: int, resume_id: int, force: bool = False) -> str:
             # Вердикт «apply» — уведомление уходит сразу, не дожидаясь досыла.
             await notification_scheduler(session).queue_pending(vacancy_id)
         return result
+
+    return run_in_session(work)
+
+
+# Черновик письма заказывает пользователь: исчерпанный лимит — отказ с понятной ошибкой,
+# временный сбой провайдера — повтор; после последнего повтора черновик помечается неудавшимся.
+@celery_app.task(
+    bind=True,
+    name=GENERATE_LETTER,
+    autoretry_for=(TransientExternalError,),
+    retry_backoff=60,
+    retry_backoff_max=600,
+    max_retries=3,
+    rate_limit=get_settings().llm.rate_limit,
+)
+def generate_letter(self: "Task[[int], str]", letter_id: int) -> str:
+    settings = get_settings().llm
+
+    async def work(session: AsyncSession) -> str:
+        if not settings.enabled:
+            # Ключ убрали, пока задача ждала в очереди.
+            await fail_letter(session, letter_id, LETTERS_DISABLED)
+            return "disabled"
+        async with llm_client() as llm:
+            try:
+                return await LetterService(session, settings, llm).generate(letter_id)
+            except TransientExternalError as exc:
+                if self.request.retries >= (self.max_retries or 0):
+                    await fail_letter(session, letter_id, exc.message)
+                raise
 
     return run_in_session(work)
 

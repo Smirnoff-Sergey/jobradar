@@ -2,6 +2,7 @@
 
 from app.db.models.application import Application, Notification, StatusHistory
 from app.db.models.evaluation import Evaluation, LLMDailyUsage, LLMGuard
+from app.db.models.letter import Letter
 from app.db.models.resume import Resume
 from app.db.models.search_profile import SearchProfile
 from app.db.models.source import Source
@@ -13,6 +14,7 @@ __all__ = [
     "Evaluation",
     "LLMDailyUsage",
     "LLMGuard",
+    "Letter",
     "Notification",
     "Resume",
     "SearchProfile",

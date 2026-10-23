@@ -58,10 +58,10 @@ export function ErrorPanel({ error, onRetry, children }: ErrorPanelProps) {
 }
 
 /** Ошибка действия рядом с кнопкой, без панели. */
-export function InlineError({ error }: { error: unknown }) {
+export function InlineError({ error, id }: { error: unknown; id?: string }) {
   if (!error) return null;
   return (
-    <p className="error-text" role="alert">
+    <p className="error-text" role="alert" id={id}>
       {errorText(error)}
     </p>
   );

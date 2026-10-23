@@ -143,6 +143,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vacancies/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Vacancy
+         * @description Добавить вакансию по ссылке на её страницу (getmatch.ru/vacancies/…).
+         *
+         *     Вакансия проходит фильтр по критериям пользователя; прошла — встаёт в очередь на оценку.
+         *     Повтор с той же ссылкой не создаёт дубля.
+         */
+        post: operations["import_vacancy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vacancies/{vacancy_id}": {
         parameters: {
             query?: never;
@@ -174,6 +197,49 @@ export interface paths {
          * @description Переоценить вакансию по активному резюме. Прежняя оценка заменится только новой.
          */
         post: operations["request_reevaluation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vacancies/{vacancy_id}/letter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Letter
+         * @description Заказать черновик сопроводительного письма по активному резюме.
+         *
+         *     Отклика нет — он создаётся со статусом «новый»; готовый черновик переводит его
+         *     в «письмо готово». Пока пишется один черновик, второй не заказать (409).
+         */
+        post: operations["request_letter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vacancies/{vacancy_id}/letters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Letters
+         * @description Черновики писем к вакансии, новые первыми.
+         */
+        get: operations["list_letters"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -584,6 +650,54 @@ export interface components {
             /** Pause Reason */
             pause_reason: string | null;
         };
+        /** LetterAccepted */
+        LetterAccepted: {
+            /** Task Id */
+            task_id: string;
+            /** Letter Id */
+            letter_id: number;
+        };
+        /**
+         * LetterFact
+         * @description Сохранённый факт письма: утверждение и дословная цитата резюме.
+         */
+        LetterFact: {
+            /** Claim */
+            claim: string;
+            /** Resume Quote */
+            resume_quote: string;
+        };
+        /**
+         * LetterRead
+         * @description Черновик письма. facts — утверждения письма с цитатами из резюме, которые их подтверждают.
+         */
+        LetterRead: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "done" | "failed";
+            /** Text */
+            text: string | null;
+            /** Facts */
+            facts: components["schemas"]["LetterFact"][] | null;
+            /** Model */
+            model: string | null;
+            /** Error */
+            error: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -805,6 +919,14 @@ export interface components {
             url: string;
             /** Is Active */
             is_active: boolean;
+        };
+        /** VacancyImport */
+        VacancyImport: {
+            /**
+             * Url
+             * @description Ссылка на страницу вакансии
+             */
+            url: string;
         };
         /** VacancyListItem */
         VacancyListItem: {
@@ -1290,6 +1412,66 @@ export interface operations {
             };
         };
     };
+    import_vacancy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VacancyImport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VacancyRead"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_vacancy: {
         parameters: {
             query?: never;
@@ -1375,6 +1557,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    request_letter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vacancy_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LetterAccepted"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_letters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vacancy_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LetterRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -1,0 +1,41 @@
+/* Панель карточки вакансии: оценка, отклик, письмо. */
+.panel {
+  display: grid;
+  gap: 1.1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel);
+}
+
+.subheading {
+  margin-bottom: 0.4rem;
+  color: var(--ink-2);
+  font-size: var(--text-s);
+  font-weight: 600;
+}
+
+/* Утверждение и чем оно подтверждается: совпадения оценки, факты письма. */
+.evidence {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence > li {
+  display: grid;
+  gap: 0.05rem;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--apply);
+}
+
+.claim {
+  font-weight: 500;
+}
+
+.proof {
+  color: var(--ink-2);
+  font-size: var(--text-s);
+}

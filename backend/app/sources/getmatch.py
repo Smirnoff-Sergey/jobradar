@@ -1,6 +1,7 @@
 """Адаптер getmatch.ru: открытый API без авторизации."""
 
 import logging
+import re
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
@@ -9,12 +10,17 @@ import httpx
 
 from app.core.errors import PermanentExternalError, TransientExternalError
 from app.core.http import RetryPolicy, get_json
-from app.sources.base import VacancyData, WorkFormat
+from app.sources.base import ImportedVacancy, VacancyData, WorkFormat
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://getmatch.ru"
 OFFERS_URL = f"{BASE_URL}/api/offers"
+# Страница вакансии — /vacancies/36738-data-scientist (id перед слагом),
+# её карточка в API — /api/offers/36738.
+VACANCY_URL = re.compile(
+    r"^https?://(?:www\.)?getmatch\.ru/vacancies/([0-9]+)(?:-[^/?#]*)?/?(?:[?#].*)?$"
+)
 
 _WORK_FORMATS: dict[str, WorkFormat] = {
     "remote": "remote",
@@ -103,6 +109,22 @@ class GetmatchAdapter:
             offset += self._page_size
             if offset >= total:
                 return
+
+    async def fetch_vacancy(self, external_id: str) -> ImportedVacancy:
+        # Карточка содержит все поля списка и полное описание — хватает одного запроса.
+        card = await get_json(self._client, f"{OFFERS_URL}/{external_id}", policy=self._policy)
+        if not isinstance(card, dict):
+            raise PermanentExternalError("getmatch: неожиданный формат карточки вакансии")
+        try:
+            data = parse_offer(card)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PermanentExternalError("getmatch: неожиданный формат карточки вакансии") from exc
+        description = card.get("description") or card.get("offer_description")
+        return ImportedVacancy(
+            data=data,
+            description=str(description) if description else None,
+            is_active=card.get("is_active", True) is not False,
+        )
 
     async def fetch_description(self, external_id: str) -> str | None:
         data = await get_json(self._client, f"{OFFERS_URL}/{external_id}", policy=self._policy)

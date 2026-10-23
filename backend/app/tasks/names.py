@@ -7,6 +7,7 @@ EVALUATE_VACANCY = "jobradar.evaluate_vacancy"
 EVALUATE_PENDING = "jobradar.evaluate_pending"
 NOTIFY_VACANCY = "jobradar.notify_vacancy"
 NOTIFY_PENDING = "jobradar.notify_pending"
+GENERATE_LETTER = "jobradar.generate_letter"
 
 DETAILS_QUEUE = "details"
 LLM_QUEUE = "llm"

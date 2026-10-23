@@ -24,7 +24,9 @@ from sqlalchemy.pool import NullPool
 
 from app import cli
 from app.core.config import CollectorSettings, get_settings
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, TransientExternalError
+from app.llm.letter_prompts import LETTER_PROMPT_VERSION
+from app.services.letters import LETTERS_DISABLED
 from app.services.queue import TaskStatus
 from app.sources.getmatch import OFFERS_URL, GetmatchAdapter
 from app.sources.registry import create_adapter
@@ -232,6 +234,78 @@ def test_evaluation_pipeline(
     # Невалидный JSON от модели при переоценке: воркер не падает, оценка — failed.
     llm_route.respond(json=completion_body("не JSON-объект"))
     assert jobs.evaluate_pair.run(vacancy_id, resume_id, True) == "failed"
+
+
+LETTER_ANSWER = {
+    "text": "Здравствуйте! Пишу на Python и работаю с PostgreSQL.",
+    "facts": [{"claim": "Python и PostgreSQL", "resume_fragment": 1}],
+}
+
+
+def order_letter(tmp_path: Path) -> int:
+    """Пользователь с резюме, вакансия и заказанный черновик письма; возвращает id черновика."""
+    user_id = run_sql(
+        f"INSERT INTO users (email, password_hash) VALUES ('{TASK_USER}', 'x') RETURNING id"
+    )
+    resume_file = tmp_path / "resume.txt"
+    resume_file.write_text("Python-разработчик, 4 года, Django, PostgreSQL", encoding="utf-8")
+    assert cli.main(["load-resume", "--email", TASK_USER, "--file", str(resume_file)]) == 0
+    resume_id = run_sql(f"SELECT id FROM resumes WHERE user_id = {user_id}")
+    jobs.collect_source.run("getmatch")
+    vacancy_id = run_sql("SELECT id FROM vacancies WHERE external_id = '101'")
+    application_id = run_sql(
+        "INSERT INTO applications (user_id, vacancy_id, status)"
+        f" VALUES ({user_id}, {vacancy_id}, 'new') RETURNING id"
+    )
+    letter_id: int = run_sql(
+        "INSERT INTO letters (application_id, resume_id, prompt_version, status) VALUES"
+        f" ({application_id}, {resume_id}, '{LETTER_PROMPT_VERSION}', 'pending') RETURNING id"
+    )
+    return letter_id
+
+
+@respx.mock
+def test_letter_task(
+    worker_queue: FakeTaskQueue, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("JOBRADAR_LLM__API_KEY", "test-key")
+    get_settings.cache_clear()
+    respx.get(OFFERS_URL).respond(json=load_getmatch_fixture())
+    respx.post(f"{get_settings().llm.base_url}/chat/completions").respond(
+        json=completion_body(LETTER_ANSWER)
+    )
+    letter_id = order_letter(tmp_path)
+
+    assert jobs.generate_letter.run(letter_id) == "done"
+    assert jobs.generate_letter.run(letter_id) == "skipped"  # повторная доставка задачи
+    assert run_sql(f"SELECT status FROM letters WHERE id = {letter_id}") == "done"
+    assert run_sql("SELECT status FROM applications") == "letter_ready"
+
+
+@respx.mock
+def test_letter_task_fails_after_last_retry(
+    worker_queue: FakeTaskQueue, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("JOBRADAR_LLM__API_KEY", "test-key")
+    get_settings.cache_clear()
+    monkeypatch.setattr(jobs.generate_letter, "max_retries", 0)
+    respx.get(OFFERS_URL).respond(json=load_getmatch_fixture())
+    respx.post(f"{get_settings().llm.base_url}/chat/completions").respond(status_code=503)
+    letter_id = order_letter(tmp_path)
+
+    with pytest.raises(TransientExternalError):
+        jobs.generate_letter.run(letter_id)
+
+    assert run_sql(f"SELECT status FROM letters WHERE id = {letter_id}") == "failed"
+
+
+def test_letter_task_disabled_without_key(worker_queue: FakeTaskQueue, tmp_path: Path) -> None:
+    with respx.mock:
+        respx.get(OFFERS_URL).respond(json=load_getmatch_fixture())
+        letter_id = order_letter(tmp_path)
+
+    assert jobs.generate_letter.run(letter_id) == "disabled"
+    assert run_sql(f"SELECT error FROM letters WHERE id = {letter_id}") == LETTERS_DISABLED
 
 
 def test_evaluate_task_disabled_without_key() -> None:

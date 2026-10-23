@@ -5,11 +5,15 @@ Beat:    celery -A app.tasks.celery_app beat
 """
 
 from datetime import timedelta
+from typing import Any
 
-from celery import Celery
+import structlog
+from celery import Celery, Task
 from celery.schedules import crontab
+from celery.signals import setup_logging, task_postrun, task_prerun
 
 from app.core.config import get_settings
+from app.core.logging import configure_logging
 from app.sources.registry import SOURCE_CODES
 from app.tasks.names import (
     COLLECT_SOURCE,
@@ -17,6 +21,7 @@ from app.tasks.names import (
     EVALUATE_PENDING,
     EVALUATE_VACANCY,
     FETCH_DETAILS,
+    GENERATE_LETTER,
     LLM_QUEUE,
     NOTIFY_PENDING,
     NOTIFY_QUEUE,
@@ -58,6 +63,7 @@ def create_celery() -> Celery:
         # Сотни загрузок описаний идут своей очередью и не задерживают сбор и перефильтрацию.
         task_routes={
             FETCH_DETAILS: {"queue": DETAILS_QUEUE},
+            GENERATE_LETTER: {"queue": LLM_QUEUE},
             EVALUATE_VACANCY: {"queue": LLM_QUEUE},
             NOTIFY_VACANCY: {"queue": NOTIFY_QUEUE},
         },
@@ -83,6 +89,23 @@ def create_celery() -> Celery:
         },
     )
     return app
+
+
+@setup_logging.connect
+def _setup_logging(**_: Any) -> None:
+    # Обработчик сигнала отключает настройку логов Celery: формат — общий для всех процессов.
+    settings = get_settings().logging
+    configure_logging(settings.level, settings.format)
+
+
+@task_prerun.connect
+def _bind_task(task_id: str, task: "Task[Any, Any]", **_: Any) -> None:
+    structlog.contextvars.bind_contextvars(task_id=task_id, task=task.name)
+
+
+@task_postrun.connect
+def _unbind_task(**_: Any) -> None:
+    structlog.contextvars.unbind_contextvars("task_id", "task")
 
 
 celery_app = create_celery()

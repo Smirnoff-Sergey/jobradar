@@ -1,0 +1,60 @@
+.panel {
+  max-width: 72ch;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.letter {
+  display: grid;
+  gap: 1rem;
+}
+
+.textRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+/* Текст письма — как он уйдёт работодателю: переносы строк сохраняются. */
+.text {
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.copy {
+  display: grid;
+  justify-items: end;
+}
+
+.older {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.older summary {
+  color: var(--action);
+  cursor: pointer;
+}
+
+.older[open] summary {
+  margin-bottom: 1rem;
+}
+
+.older > article + article {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px dashed var(--line);
+}
+
+@media (max-width: 40rem) {
+  .textRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

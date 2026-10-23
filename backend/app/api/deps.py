@@ -8,10 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.errors import NotAuthenticatedError, TelegramDisabledError
+from app.core.http import create_client
 from app.db.models import User
 from app.services.auth import AuthService
 from app.services.evaluation import EvaluationScheduler
+from app.services.letters import LetterScheduler
 from app.services.queue import TaskQueue
+from app.services.vacancy_import import AdapterFactory, VacancyImportService
+from app.sources.registry import create_adapter
 from app.telegram.client import TelegramClient, open_telegram_client
 
 
@@ -50,6 +54,37 @@ def get_evaluation_scheduler(
 
 
 EvaluationSchedulerDep = Annotated[EvaluationScheduler, Depends(get_evaluation_scheduler)]
+
+
+def get_letter_scheduler(
+    session: SessionDep, queue: TaskQueueDep, settings: SettingsDep
+) -> LetterScheduler:
+    return LetterScheduler(session, queue, settings.llm)
+
+
+LetterSchedulerDep = Annotated[LetterScheduler, Depends(get_letter_scheduler)]
+
+
+async def get_import_adapters(settings: SettingsDep) -> AsyncIterator[AdapterFactory]:
+    """Адаптеры источников для импорта по ссылке: короткий таймаут и мало повторов —
+    ответа ждёт пользователь."""
+    collector = settings.collector
+    async with create_client(collector.import_timeout_seconds) as client:
+        yield lambda code: create_adapter(
+            code, client, collector, max_attempts=collector.import_max_attempts
+        )
+
+
+def get_import_service(
+    session: SessionDep,
+    adapters: Annotated[AdapterFactory, Depends(get_import_adapters)],
+    queue: TaskQueueDep,
+    settings: SettingsDep,
+) -> VacancyImportService:
+    return VacancyImportService(session, adapters, queue, settings.llm)
+
+
+VacancyImportServiceDep = Annotated[VacancyImportService, Depends(get_import_service)]
 
 # auto_error=False: отсутствие токена обрабатываем сами, чтобы ответ был в едином формате ошибок.
 _bearer = HTTPBearer(auto_error=False)

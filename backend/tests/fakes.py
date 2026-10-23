@@ -45,6 +45,7 @@ class FakeTaskQueue:
     refiltered: list[int] = field(default_factory=list)
     evaluations: list[tuple[int, int, bool]] = field(default_factory=list)
     notifications: list[tuple[int, int]] = field(default_factory=list)
+    letters: list[int] = field(default_factory=list)
     statuses: dict[str, TaskStatus] = field(default_factory=dict)
 
     async def collect_source(self, source_code: str) -> str:
@@ -67,6 +68,10 @@ class FakeTaskQueue:
     async def notify_vacancy(self, user_id: int, vacancy_id: int) -> str:
         self.notifications.append((user_id, vacancy_id))
         return f"notify-{len(self.notifications)}"
+
+    async def generate_letter(self, letter_id: int) -> str:
+        self.letters.append(letter_id)
+        return f"letter-{len(self.letters)}"
 
     async def status(self, task_id: str) -> TaskStatus:
         return self.statuses.get(task_id, TaskStatus(task_id, "PENDING"))

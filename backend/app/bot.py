@@ -9,6 +9,7 @@ import logging
 import sys
 
 from app.core.config import get_settings
+from app.core.logging import configure_logging
 from app.db.session import open_session_factory
 from app.telegram.client import create_bot
 from app.telegram.handlers import create_dispatcher
@@ -42,9 +43,8 @@ async def run() -> int:
 
 
 def main() -> int:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
+    settings = get_settings().logging
+    configure_logging(settings.level, settings.format)
     return asyncio.run(run())
 
 

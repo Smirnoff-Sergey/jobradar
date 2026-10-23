@@ -27,22 +27,22 @@ def verdict_for(score: int) -> Verdict:
     return "skip"
 
 
-class _Strict(BaseModel):
+class StrictModel(BaseModel):
     # extra="forbid" даёт в JSON-схеме additionalProperties: false — этого требует strict-режим.
     model_config = ConfigDict(extra="forbid")
 
 
-class Match(_Strict):
+class Match(StrictModel):
     requirement: str = Field(description="Требование вакансии")
     evidence: str = Field(description="Чем резюме это подтверждает")
 
 
-class Gap(_Strict):
+class Gap(StrictModel):
     requirement: str = Field(description="Требование вакансии, которого нет в резюме")
     severity: Severity = Field(description="blocker — обязательное, minor — желательное")
 
 
-class EvaluationResult(_Strict):
+class EvaluationResult(StrictModel):
     score: int = Field(ge=0, le=100, description="Соответствие от 0 до 100")
     verdict: Verdict
     matches: list[Match]

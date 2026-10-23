@@ -9,6 +9,14 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import ColumnElement, or_
 from sqlalchemy.orm import InstrumentedAttribute
 
+# Захват старше этого считается зависшим (воркер упал посреди запроса) и перехватывается.
+STALE_CLAIM = timedelta(minutes=30)
+
+
+def stale_before() -> datetime:
+    """Граница «зависшего» захвата оценки или черновика письма."""
+    return stale_cutoff(STALE_CLAIM)
+
 
 def stale_cutoff(ttl: timedelta) -> datetime:
     """Захваты, обновлённые раньше этого момента, считаются зависшими."""

@@ -1,0 +1,8 @@
+# Prometheus опрашивает /metrics API внутри сети compose (наружу nginx его не отдаёт).
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  - job_name: jobradar-api
+    static_configs:
+      - targets: ["api:8000"]

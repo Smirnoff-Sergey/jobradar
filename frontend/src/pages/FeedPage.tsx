@@ -2,6 +2,7 @@ import { Link, useSearchParams } from "react-router";
 
 import { useSources, useVacancies } from "../api/hooks";
 import type { VacancyListItem } from "../api/models";
+import { ImportForm } from "../components/ImportForm";
 import { Pager } from "../components/Pager";
 import { EmptyState, QueryState } from "../components/QueryState";
 import rows from "../components/rows.module.css";
@@ -57,6 +58,9 @@ export function FeedPage() {
             Сбросить фильтры
           </button>
         )}
+        <div className={styles.import}>
+          <ImportForm />
+        </div>
       </div>
 
       <div className={styles.filters} role="search" aria-label="Фильтры ленты">

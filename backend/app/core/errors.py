@@ -113,6 +113,12 @@ class ChatUnavailableError(PermanentExternalError):
     message = "Чат Telegram недоступен"
 
 
+class InvalidUrlError(AppError):
+    """Ссылка не на вакансию поддерживаемого источника."""
+
+    code = "invalid_url"
+
+
 class InvalidStatusError(AppError):
     code = "invalid_status"
     message = "Неизвестный статус отклика"

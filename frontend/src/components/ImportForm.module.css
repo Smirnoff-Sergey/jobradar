@@ -1,0 +1,14 @@
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 0.5rem;
+  width: min(100%, 30rem);
+}
+
+.field {
+  min-width: 0;
+}
+
+.error {
+  grid-column: 1 / -1;
+}

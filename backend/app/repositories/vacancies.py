@@ -140,6 +140,12 @@ class VacancyRepository:
         )
         return len((await self._session.scalars(stmt)).all())
 
+    async def get_by_external(self, source_code: str, external_id: str) -> Vacancy | None:
+        stmt = select(Vacancy).where(
+            Vacancy.source_code == source_code, Vacancy.external_id == external_id
+        )
+        return await self._session.scalar(stmt.execution_options(populate_existing=True))
+
     async def get(self, vacancy_id: int) -> Vacancy | None:
         return await self._session.get(Vacancy, vacancy_id)
 

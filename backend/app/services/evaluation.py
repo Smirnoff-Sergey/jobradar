@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime, timedelta
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +18,7 @@ from app.domain.evaluation import DONE, FAILED
 from app.llm.base import LLMClient
 from app.llm.evaluator import BudgetExhaustedError, EvaluationOutcome, request_evaluation
 from app.llm.prompts import PROMPT_VERSION, vacancy_for_prompt
-from app.repositories.claims import stale_cutoff
+from app.repositories.claims import stale_before
 from app.repositories.evaluations import Claim, EvaluationRepository
 from app.repositories.resumes import ResumeRepository
 from app.repositories.vacancies import VacancyRepository
@@ -29,13 +28,6 @@ from app.services.queue import TaskQueue
 logger = logging.getLogger(__name__)
 
 EvaluateResult = Literal["done", "failed", "skipped", "not_ready", "postponed"]
-
-# Захват старше этого считается зависшим (воркер упал посреди запроса) и перехватывается.
-STALE_CLAIM = timedelta(minutes=30)
-
-
-def stale_before() -> datetime:
-    return stale_cutoff(STALE_CLAIM)
 
 
 class EvaluationScheduler:

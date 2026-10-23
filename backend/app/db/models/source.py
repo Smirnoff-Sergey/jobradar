@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import DateTime, String, Text, true
+from sqlalchemy import DateTime, Integer, String, Text, text, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +19,8 @@ class Source(Base):
     last_run_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_run_stats: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     last_error: Mapped[str | None] = mapped_column(Text)
+    # Неудачные сборы за всё время — для метрики ошибок адаптера (SourceRepository.count_failure).
+    failed_runs: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
     def finish_run(
         self,

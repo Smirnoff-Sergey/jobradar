@@ -4,6 +4,8 @@ import { Link, useParams } from "react-router";
 import { keys, useBackgroundTask, useReevaluate, useSetApplication, useVacancy } from "../api/hooks";
 import type { Evaluation, Vacancy } from "../api/models";
 import { Button } from "../components/Button";
+import { LetterPanel } from "../components/LetterPanel";
+import panel from "../components/panel.module.css";
 import { EmptyState, InlineError, QueryState } from "../components/QueryState";
 import { ScoreMeter } from "../components/ScoreMeter";
 import { StatusPicker } from "../components/StatusPicker";
@@ -56,7 +58,9 @@ function VacancyCard({ vacancy }: { vacancy: Vacancy }) {
       </header>
 
       <div className={styles.columns}>
-        <section className={styles.description} aria-label="Описание вакансии">
+        <div className={styles.main}>
+          <LetterPanel vacancyId={vacancy.id} />
+          <section className={styles.description} aria-label="Описание вакансии">
           {vacancy.filter && !vacancy.filter.passed && (
             <p className={styles.rejected}>
               Фильтр отсеял вакансию: {vacancy.filter.reasons.join("; ")}.
@@ -76,11 +80,12 @@ function VacancyCard({ vacancy }: { vacancy: Vacancy }) {
               Это краткое описание из списка. Полное загрузится, если вакансия пройдёт фильтр.
             </p>
           )}
-        </section>
+          </section>
+        </div>
 
         <aside className={styles.aside}>
           <EvaluationPanel vacancy={vacancy} />
-          <section className={styles.panel} aria-labelledby="application-heading">
+          <section className={panel.panel} aria-labelledby="application-heading">
             <h2 id="application-heading">Отклик</h2>
             <StatusPicker
               label="Статус отклика"
@@ -115,7 +120,7 @@ function EvaluationPanel({ vacancy }: { vacancy: Vacancy }) {
   };
 
   return (
-    <section className={styles.panel} aria-labelledby="evaluation-heading">
+    <section className={panel.panel} aria-labelledby="evaluation-heading">
       <h2 id="evaluation-heading" className="visually-hidden">
         Оценка
       </h2>
@@ -156,7 +161,7 @@ function EvaluationDetails({ evaluation }: { evaluation: Evaluation }) {
     <>
       {dealbreakers.length > 0 && (
         <div className={styles.dealbreakers}>
-          <h3>Мешает отклику</h3>
+          <h3 className={`${panel.subheading} ${styles.heading}`}>Мешает отклику</h3>
           <ul>
             {dealbreakers.map((item) => (
               <li key={item}>{item}</li>
@@ -165,22 +170,22 @@ function EvaluationDetails({ evaluation }: { evaluation: Evaluation }) {
         </div>
       )}
       <div>
-        <h3>Совпадает</h3>
+        <h3 className={panel.subheading}>Совпадает</h3>
         {matches.length === 0 ? (
           <p className="muted">Совпадений модель не нашла.</p>
         ) : (
-          <ul className={styles.matches}>
+          <ul className={panel.evidence}>
             {matches.map((match, index) => (
               <li key={index}>
-                <span className={styles.requirement}>{match.requirement}</span>
-                <span className={styles.evidence}>{match.evidence}</span>
+                <span className={panel.claim}>{match.requirement}</span>
+                <span className={panel.proof}>{match.evidence}</span>
               </li>
             ))}
           </ul>
         )}
       </div>
       <div>
-        <h3>Не хватает</h3>
+        <h3 className={panel.subheading}>Не хватает</h3>
         {gaps.length === 0 ? (
           <p className="muted">Пробелов нет.</p>
         ) : (

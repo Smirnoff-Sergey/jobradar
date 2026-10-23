@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.applications import ApplicationStatus
 from app.domain.evaluation import EvaluationStatus, Gap, Match, Verdict
@@ -75,6 +75,10 @@ class VacancyListItem(BaseModel):
 class VacancyRead(VacancyListItem):
     short_description: str | None
     description: str | None
+
+
+class VacancyImport(BaseModel):
+    url: str = Field(min_length=1, max_length=500, description="Ссылка на страницу вакансии")
 
 
 class VacancyPage(BaseModel):

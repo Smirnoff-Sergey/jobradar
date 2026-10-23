@@ -24,6 +24,7 @@ export const keys = {
   vacancies: ["vacancies"] as const,
   vacancyList: (query: VacancyQuery) => ["vacancies", "list", query] as const,
   vacancy: (id: number) => ["vacancies", "detail", id] as const,
+  letters: (vacancyId: number) => ["letters", vacancyId] as const,
   applications: ["applications"] as const,
   applicationList: (query: ApplicationQuery) => ["applications", "list", query] as const,
   application: (id: number) => ["applications", "detail", id] as const,
@@ -93,6 +94,50 @@ export function useReevaluate(vacancyId: number) {
           params: { path: { vacancy_id: vacancyId } },
         }),
       ),
+  });
+}
+
+export function useLetters(vacancyId: number) {
+  return useQuery({
+    queryKey: keys.letters(vacancyId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/vacancies/{vacancy_id}/letters", {
+          params: { path: { vacancy_id: vacancyId } },
+        }),
+      ),
+    // Пока черновик пишется, список сам подтянет результат.
+    refetchInterval: (query) =>
+      query.state.data?.some((letter) => letter.status === "pending") ? 3000 : false,
+  });
+}
+
+export function useRequestLetter(vacancyId: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.POST("/api/v1/vacancies/{vacancy_id}/letter", {
+          params: { path: { vacancy_id: vacancyId } },
+        }),
+      ),
+    // Заказ письма создаёт отклик, готовое письмо меняет его статус.
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: keys.letters(vacancyId) }),
+        invalidateApplications(client),
+      ]),
+  });
+}
+
+export function useImportVacancy() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (url: string) => unwrap(api.POST("/api/v1/vacancies/import", { body: { url } })),
+    onSuccess: (vacancy) => {
+      client.setQueryData(keys.vacancy(vacancy.id), vacancy);
+      return client.invalidateQueries({ queryKey: keys.vacancies });
+    },
   });
 }
 

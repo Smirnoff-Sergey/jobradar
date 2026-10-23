@@ -8,6 +8,7 @@ export type ApplicationListItem = Schemas["ApplicationListItem"];
 export type ApplicationStatus = Schemas["ApplicationRead"]["status"];
 export type ContractType = NonNullable<Schemas["SearchProfileUpdate"]["contract_types"]>[number];
 export type Evaluation = Schemas["EvaluationRead"];
+export type Letter = Schemas["LetterRead"];
 export type LLMUsage = Schemas["LLMUsageRead"];
 export type Resume = Schemas["ResumeRead"];
 export type SearchProfile = Schemas["SearchProfileRead"];

@@ -2,14 +2,21 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
-from app.api.deps import CurrentUserDep, EvaluationSchedulerDep, SessionDep
+from app.api.deps import (
+    CurrentUserDep,
+    EvaluationSchedulerDep,
+    LetterSchedulerDep,
+    SessionDep,
+    VacancyImportServiceDep,
+)
 from app.domain.applications import ApplicationStatus
 from app.domain.evaluation import Verdict
 from app.domain.vacancies import FilterStatus, VacancyListQuery, VacancySort
 from app.schemas.application import ApplicationRead, ApplicationSet
 from app.schemas.common import ErrorResponse
+from app.schemas.letter import LetterAccepted, LetterRead
 from app.schemas.source import TaskAccepted
-from app.schemas.vacancy import VacancyListItem, VacancyPage, VacancyRead
+from app.schemas.vacancy import VacancyImport, VacancyListItem, VacancyPage, VacancyRead
 from app.services.applications import ApplicationService
 from app.services.vacancies import VacancyService
 
@@ -53,6 +60,30 @@ async def list_vacancies(
     )
 
 
+@router.post(
+    "/import",
+    responses={
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        502: {"model": ErrorResponse},
+    },
+)
+async def import_vacancy(
+    body: VacancyImport,
+    user: CurrentUserDep,
+    session: SessionDep,
+    importer: VacancyImportServiceDep,
+) -> VacancyRead:
+    """Добавить вакансию по ссылке на её страницу (getmatch.ru/vacancies/…).
+
+    Вакансия проходит фильтр по критериям пользователя; прошла — встаёт в очередь на оценку.
+    Повтор с той же ссылкой не создаёт дубля.
+    """
+    vacancy_id = await importer.import_url(user.id, body.url)
+    return VacancyRead.build(await VacancyService(session).get(vacancy_id, user.id))
+
+
 @router.get("/{vacancy_id}", responses={404: {"model": ErrorResponse}})
 async def get_vacancy(vacancy_id: int, user: CurrentUserDep, session: SessionDep) -> VacancyRead:
     return VacancyRead.build(await VacancyService(session).get(vacancy_id, user.id))
@@ -68,6 +99,36 @@ async def request_reevaluation(
 ) -> TaskAccepted:
     """Переоценить вакансию по активному резюме. Прежняя оценка заменится только новой."""
     return TaskAccepted(task_id=await scheduler.request_reevaluation(user.id, vacancy_id))
+
+
+@router.post(
+    "/{vacancy_id}/letter",
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+async def request_letter(
+    vacancy_id: int, user: CurrentUserDep, scheduler: LetterSchedulerDep
+) -> LetterAccepted:
+    """Заказать черновик сопроводительного письма по активному резюме.
+
+    Отклика нет — он создаётся со статусом «новый»; готовый черновик переводит его
+    в «письмо готово». Пока пишется один черновик, второй не заказать (409).
+    """
+    letter, task_id = await scheduler.request_letter(user.id, vacancy_id)
+    return LetterAccepted(task_id=task_id, letter_id=letter.id)
+
+
+@router.get("/{vacancy_id}/letters")
+async def list_letters(
+    vacancy_id: int, user: CurrentUserDep, scheduler: LetterSchedulerDep
+) -> list[LetterRead]:
+    """Черновики писем к вакансии, новые первыми."""
+    letters = await scheduler.list_for_vacancy(user.id, vacancy_id)
+    return [LetterRead.model_validate(letter) for letter in letters]
 
 
 @router.put("/{vacancy_id}/application", responses={404: {"model": ErrorResponse}})

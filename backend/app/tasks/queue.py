@@ -11,6 +11,7 @@ from app.tasks.names import (
     COLLECT_SOURCE,
     EVALUATE_VACANCY,
     FETCH_DETAILS,
+    GENERATE_LETTER,
     NOTIFY_VACANCY,
     REFILTER_USER,
 )
@@ -44,6 +45,9 @@ class CeleryTaskQueue:
 
     async def notify_vacancy(self, user_id: int, vacancy_id: int) -> str:
         return await self._send(NOTIFY_VACANCY, user_id, vacancy_id)
+
+    async def generate_letter(self, letter_id: int) -> str:
+        return await self._send(GENERATE_LETTER, letter_id)
 
     async def status(self, task_id: str) -> TaskStatus:
         def read() -> TaskStatus:

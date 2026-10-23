@@ -22,6 +22,15 @@ class ApplicationRepository:
             stmt = stmt.with_for_update().execution_options(populate_existing=True)
         return await self._session.scalar(stmt)
 
+    async def get_by_id(
+        self, application_id: int, *, for_update: bool = False
+    ) -> Application | None:
+        """Отклик без проверки владельца — для фоновых задач, которые получают id из API."""
+        stmt = select(Application).where(Application.id == application_id)
+        if for_update:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        return await self._session.scalar(stmt)
+
     async def get_or_create(
         self, user_id: int, vacancy_id: int, status: str
     ) -> tuple[Application, bool]:
